@@ -15,9 +15,8 @@ services:
     env_file:
       - .env
     volumes:
-      # Mount the local directory to the container for hot-reloading (optional, but great for dev)
       - .:/app
       - /app/node_modules # Prevents local node_modules from overwriting the container's isolated ones
       # Mount AWS credentials so the container can authenticate with DynamoDB & SecretsManager
       - ~/.aws:/root/.aws:ro
-    command: npm run dev # Use nodemon for hot-reloading during development
+    command: node server.js
