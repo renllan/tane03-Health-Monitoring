@@ -4,8 +4,6 @@ on:
   push:
     branches: [ "main" ]
   
-  merge:
-    branches: [ "main" ]
 
 jobs:
   deploy:
@@ -28,22 +26,24 @@ jobs:
     
     - name: Ensure ECR Repository exists
       run: |
-        aws ecr describe-repositories --repository-names "tane03/health-model-api 
+        aws ecr describe-repositories --repository-names tane03/health-model-api
 
+    - name: build and push to ecr
 
-    - name: Build, Tag, and Push Image
       env:
-        ECR_REGISTRY: ${{ teps.login-ecr.outputs.registry}}
-        ECR_REPOSITORY: tane03-long-term-health-monitoring-repository
-        IMAGE_TAG: tane03-long-term-health-monitoring-${{ github.sha }}
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        # Updated to match your actual repository name
+        ECR_REPOSITORY: tane03/health-model-api
+        IMAGE_TAG: ${{ github.sha }}
         
       run: |
         # Build the container
-        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-        
-        # Push to ECR
+        docker build -f docker/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+        # Push to ECR with the Git SHA tag
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
         
         # Also tag as 'latest' so you always have a stable reference
         docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+    
