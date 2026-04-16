@@ -3,19 +3,25 @@
     "target": "es2022",
     "module": "commonjs",
     "moduleResolution": "node",
+    "ignoreDeprecations": "5.0",
+
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "strict": true,
     "skipLibCheck": true,
     "outDir": "./dist",
-    "rootDir": "./"
+    "rootDir": "./",
+    "allowJs": true,
+    "types": ["node"]
   },
   "include": [
     "app.ts",
+    "lambda.js",
     "service/**/*.ts",
     "router/**/*.ts",
     "controller/**/*.ts",
     "repository/**/*.ts",
+    "repository/**/*.js",
     "types/**/*.ts"
   ],
   "exclude": [

@@ -11,7 +11,7 @@ RUN npm install
 COPY . ${LAMBDA_TASK_ROOT}/
 
 # Pre-compile TypeScript to JS — eliminates ts-node cold start timeout
-RUN npx tsc
+RUN rm -rf dist && npx tsc
 
 # Point Lambda to the handler in lambda.js
 CMD ["lambda.handler"]
