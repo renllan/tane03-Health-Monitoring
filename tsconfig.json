@@ -4,7 +4,6 @@
     "module": "commonjs",
     "moduleResolution": "node",
     "ignoreDeprecations": "5.0",
-
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "strict": true,
@@ -12,7 +11,10 @@
     "outDir": "./dist",
     "rootDir": "./",
     "allowJs": true,
-    "types": ["node"]
+    "checkJs": false,
+    "types": [
+      "node"
+    ]
   },
   "include": [
     "app.ts",
