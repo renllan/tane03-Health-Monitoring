@@ -6,8 +6,20 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "strict": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "outDir": "./dist",
+    "rootDir": "./"
   },
-  "include": ["service/**/*.ts", "router/**/*.ts", "controller/**/*.ts", "repository/**/*.ts", "types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "include": [
+    "app.ts",
+    "service/**/*.ts",
+    "router/**/*.ts",
+    "controller/**/*.ts",
+    "repository/**/*.ts",
+    "types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
 }
