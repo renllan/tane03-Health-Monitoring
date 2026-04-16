@@ -1,20 +1,14 @@
-# Use the official Node.js Alpine image for a lightweight footprint
-FROM node:20-alpine
-
-# Set the working directory inside the container
-WORKDIR /app
+# Use the official AWS Lambda Node.js 20 runtime image
+FROM public.ecr.aws/lambda/nodejs:20
 
 # Copy package.json and package-lock.json first to leverage Docker cache
-COPY package*.json ./
+COPY package*.json ${LAMBDA_TASK_ROOT}/
 
 # Install project dependencies
 RUN npm install
 
 # Copy the rest of the application code
-COPY . .
+COPY . ${LAMBDA_TASK_ROOT}/
 
-# Expose the port your Express app runs on
-EXPOSE 3000
-
-# Start the application using server.js
-CMD ["node", "server.js"]
+# Point Lambda to the handler in lambda.js
+CMD ["lambda.handler"]

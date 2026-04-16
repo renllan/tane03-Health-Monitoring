@@ -1,22 +1,36 @@
 version: '3.8'
 
 services:
-  health-monitor-api:
+  # --- Lambda mode: simulates the real AWS Lambda environment locally ---
+  lambda:
     build:
       context: .
       dockerfile: docker/Dockerfile
-    container_name: health-monitor
-    restart: unless-stopped
+    container_name: health-monitor-lambda
     ports:
-      - "3000:3000"
-    environment:
-      # Inject environment variables from your local .env file
-      - NODE_ENV=development
+      - "9000:8080"   # Lambda RIE listens on 8080 inside, exposed on 9000
     env_file:
       - .env
+    environment:
+      - NODE_ENV=production
+    volumes:
+      # Mount AWS credentials for DynamoDB & SecretsManager access
+      - ~/.aws:/root/.aws:ro
+
+  # --- Dev mode: simple Express server, faster for local development ---
+  dev:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev
+    container_name: health-monitor-dev
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=development
     volumes:
       - .:/app
-      - /app/node_modules # Prevents local node_modules from overwriting the container's isolated ones
-      # Mount AWS credentials so the container can authenticate with DynamoDB & SecretsManager
+      - /app/node_modules
       - ~/.aws:/root/.aws:ro
     command: node server.js
