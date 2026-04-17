@@ -3,20 +3,8 @@ import {
     GetSecretValueCommand,
 } from '@aws-sdk/client-secrets-manager';
 import { fromCognitoIdentityPool } from '@aws-sdk/credential-providers';
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, GetCommand } from "@aws-sdk/lib-dynamodb";
 import { LoginResponse } from "../types/loginType";
-const REGION = process.env.REGION;
-const dynamoClient = new DynamoDBClient({
-    region: REGION,
-    credentials: process.env.USE_COGNITO === 'true'
-        ? fromCognitoIdentityPool({
-            identityPoolId: process.env.IDENTITY_POOL_ID!,
-            clientConfig: { region: REGION },
-        })
-        : undefined,
-});
-const docClient = DynamoDBDocumentClient.from(dynamoClient);
+import { DeviceGroupRepo } from "../repository/DeviceGroup_repo";
 
 export async function loginToAAASWatch(imei: string): Promise<string> {
     try {
@@ -54,11 +42,11 @@ async function getDeviceUsername(imei: string) {
     // For local development, we want to use the default credential provider (IAM)
     // instead of Cognito, which requires a logged-in user context.
     const client = new SecretsManagerClient({
-        region: REGION,
+        region: process.env.US_REGION,
         credentials: process.env.USE_COGNITO === 'true'
             ? fromCognitoIdentityPool({
                 identityPoolId: process.env.IDENTITY_POOL_ID!,
-                clientConfig: { region: REGION },
+                clientConfig: { region: process.env.US_REGION },
             })
             : undefined, // undefined falls back to default provider (IAM keys/roles)
     });
@@ -77,22 +65,12 @@ async function getDeviceUsername(imei: string) {
 }
 
 async function getDeviceGroup(imei: string) {
-    const response = await docClient.send(
-        new GetCommand({
-            TableName: process.env.DEVICE_INFO_TABLE,
-            Key: {
-                id: imei, // Look up directly by the 'id' attribute
-            },
-        })
-    );
-
-    if (!response.Item) {
+    const { group, userId } = await DeviceGroupRepo.getDeviceGroup(imei);
+    if (!group || !userId) {
         throw new Error(`Device with IMEI ${imei} not found`);
     }
-
-    const item = response.Item;
     return {
-        group: item.group,
-        userId: item.userId,
+        group: group,
+        userId: userId,
     };
 }
