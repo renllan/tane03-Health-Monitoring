@@ -51,12 +51,21 @@ jobs:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         ECR_REPOSITORY: tane03/health-model-api
         IMAGE_TAG: ${{ github.sha }}
-        
+
       run: |
         aws lambda update-function-code \
           --function-name tane03-long-term-health-monitoring \
           --image-uri $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
           --region ap-northeast-1
+          --environment "Variables={
+            DEVICE_INFO_TABLE=${{ secrets.DEVICE_INFO_TABLE }},
+            HEALTH_DATA_TABLE=${{ secrets.HEALTH_DATA_TABLE }},
+            HRV_TABLE=${{ secrets.HRV_TABLE }},
+            AAASWatch_BASE_URL=${{ secrets.AAASWatch_BASE_URL }},
+            US_REGION=us-east-1,
+            AP_NORTHEAST_REGION=ap-northeast-1,
+            USE_COGNITO=false
+          }"
 
 
 
