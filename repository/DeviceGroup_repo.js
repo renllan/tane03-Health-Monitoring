@@ -1,11 +1,10 @@
 const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const { DynamoDBDocumentClient, GetCommand } = require("@aws-sdk/lib-dynamodb");
 
-const client = new DynamoDBClient({ region: process.env.REGION });
+const client = new DynamoDBClient({ region: process.env.US_REGION });
 const docClient = DynamoDBDocumentClient.from(client);
 
 // It's recommended to standardize your table name
-const TABLE_NAME = process.env.HEALTH_DATA_TABLE;
 
 export const DeviceGroupRepo = {
     async getDeviceGroup(imei) {
