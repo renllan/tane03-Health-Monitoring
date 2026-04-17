@@ -57,6 +57,19 @@ jobs:
           --function-name tane03-long-term-health-monitoring \
           --image-uri $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
           --region ap-northeast-1
+          
+
+
+
+        # Wait for the update to finish
+        aws lambda wait function-updated \
+          --function-name tane03-long-term-health-monitoring \
+          --region ap-northeast-1
+
+          
+        aws lambda update-function-configuration \
+          --function-name tane03-long-term-health-monitoring \
+          --region ap-northeast-1 \
           --environment "Variables={
             DEVICE_INFO_TABLE=${{ secrets.DEVICE_INFO_TABLE }},
             HEALTH_DATA_TABLE=${{ secrets.HEALTH_DATA_TABLE }},
@@ -67,14 +80,7 @@ jobs:
             USE_COGNITO=false
           }"
 
-
-
-        # Wait for the update to finish
-        aws lambda wait function-updated \
-          --function-name tane03-long-term-health-monitoring \
-          --region ap-northeast-1
-
-        echo "✅ Lambda deployed successfully!"
+      
     - name: Check api health
       env:
         BASE_URL: ${{ secrets.BASE_URL }}
