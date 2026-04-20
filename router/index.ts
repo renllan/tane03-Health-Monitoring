@@ -1,8 +1,10 @@
 import { Router } from 'express';
 import { notificationController } from '../controller/notificationController';
 import { ASSWatchLoginController } from '../controller/ASSWatchLoginController';
+import hrvRoutes from './hrv_routes';
 
 const router = Router();
+router.use('/', hrvRoutes);
 
 // Define routes
 router.post('/send-notification', async (req, res) => {
