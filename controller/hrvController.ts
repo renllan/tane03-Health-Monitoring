@@ -14,9 +14,5 @@ export const HRVController = {
     async getSDNN(imei: string, timestamp: string) {
         return await HRVService.calculateSDNN(imei, timestamp);
     },
-
-    async getHRVHistory(imei: string, startTimestamp: string, endTimestamp: string, type: string) {
-        return await HRV_repo.getHRVByDateRange(imei, startTimestamp, endTimestamp, type);
-    }
 }
 
