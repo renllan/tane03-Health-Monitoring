@@ -1,5 +1,5 @@
 const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
-const { DynamoDBDocumentClient, GetCommand } = require("@aws-sdk/lib-dynamodb");
+const { DynamoDBDocumentClient, GetCommand, QueryCommand } = require("@aws-sdk/lib-dynamodb");
 // Setup the DynamoDB Client
 const client = new DynamoDBClient({ region: process.env.US_REGION });
 const docClient = DynamoDBDocumentClient.from(client);
@@ -36,7 +36,7 @@ export const HeartRateRepo = {
 
         const response = await docClient.send(
             new QueryCommand({
-                TableName: TABLE_NAME,
+                TableName: process.env.HEALTH_DATA_TABLE,
                 KeyConditionExpression: "deviceId = :deviceId AND #typeTime <= :targetDate",
                 ExpressionAttributeNames: {
                     "#typeTime": "type#timestamp"
@@ -66,7 +66,7 @@ export const HeartRateRepo = {
 
         const response = await docClient.send(
             new QueryCommand({
-                TableName: TABLE_NAME,
+                TableName: process.env.HEALTH_DATA_TABLE,
                 KeyConditionExpression: "deviceId = :deviceId AND #typeTime >= :startDate",
                 ExpressionAttributeNames: {
                     "#typeTime": "type#timestamp"
@@ -82,23 +82,25 @@ export const HeartRateRepo = {
 
     //return heartrate data for the last hour given timestamp
     async getLastHourData(imei, timestamp) {
-        const thirtyMinutesAgo = new Date(timestamp);
+        const timeInMillis = Number(timestamp) * 1000;
+
+        const thirtyMinutesAgo = new Date(timeInMillis);
         thirtyMinutesAgo.setMinutes(thirtyMinutesAgo.getMinutes() - 30);
 
-        const thirtyMinutesLater = new Date(timestamp);
+        const thirtyMinutesLater = new Date(timeInMillis);
         thirtyMinutesLater.setMinutes(thirtyMinutesLater.getMinutes() + 30);
 
         const response = await docClient.send(
             new QueryCommand({
-                TableName: TABLE_NAME,
-                KeyConditionExpression: "deviceId = :deviceId AND #typeTime BETWEEN :startDate AND :endDate",
+                TableName: process.env.HEALTH_DATA_TABLE,
+                KeyConditionExpression: "deviceId = :deviceId AND #sortKey BETWEEN :startDate AND :endDate",
                 ExpressionAttributeNames: {
-                    "#typeTime": "type#timestamp"
+                    "#sortKey": "timestamp#type"
                 },
                 ExpressionAttributeValues: {
                     ":deviceId": imei,
-                    ":startDate": `heartrate#${thirtyMinutesAgo.toISOString()}`,
-                    ":endDate": `heartrate#${thirtyMinutesLater.toISOString()}`,
+                    ":startDate": `${thirtyMinutesAgo.toISOString()}#heartrate`,
+                    ":endDate": `${thirtyMinutesLater.toISOString()}#heartrate`,
                 }
             })
         );
