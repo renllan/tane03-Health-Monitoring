@@ -1,8 +1,12 @@
+export interface HeartRateData {
+    timestamp: string;
+    value: number;
+}
+
 export interface SleepSegment {
     startTime: string;
     endTime: string;
-    status?: string | number;
-    [key: string]: any;
+    hrList: HeartRateData[];
 }
 
 export interface SleepData {
