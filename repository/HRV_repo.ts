@@ -18,7 +18,7 @@ export const HRV_repo = {
             },
         });
         const response = await docClient.send(command);
-        return response.item;
+        return response.Item;
         //return response.Item;
     },
 
