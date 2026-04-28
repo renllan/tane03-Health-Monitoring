@@ -6,8 +6,8 @@ const client = new DynamoDBClient({ region: process.env.AP_NORTHEAST_REGION });
 const docClient = DynamoDBDocumentClient.from(client);
 
 
-const PRIMARY_KEY = "imei#type"
-const table_name = process.env.HEALTH_DATA_BASELINE_TABLE
+const PRIMARY_KEY = "imei#type";
+const table_name = process.env.HEALTH_BASELINE_TABLE;
 
 //get the baseline data from the repo
 export const BaselineRepo = {
@@ -21,7 +21,7 @@ export const BaselineRepo = {
         const response = await docClient.send(command);
         return response.Item;
     },
-//save the baseline data to the repo
+    //save the baseline data to the repo
     async saveBaseline(data: BaselineData) {
         const command = new PutCommand({
             TableName: table_name,

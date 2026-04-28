@@ -10,7 +10,7 @@ const docClient = DynamoDBDocumentClient.from(client);
 // HASH key:  imei (S)
 // RANGE key: date (S) — format: "YYYY-MM-DD"
 
-const TABLE_NAME = process.env.TanE03_Sleep_Table;
+const TABLE_NAME = process.env.TanE03_SLEEP_TABLE;
 
 // Map raw DynamoDB item → SleepData type (deserializes segments string → object)
 function mapToSleepData(item: Record<string, any>): SleepData {
@@ -81,6 +81,7 @@ export const SleepRepo = {
         const response = await docClient.send(command);
         return (response.Items || []).map(mapToSleepData);
     },
+
 
     async saveSleep(data: SleepData): Promise<void> {
         const command = new PutCommand({
