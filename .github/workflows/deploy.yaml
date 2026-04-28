@@ -79,7 +79,7 @@ jobs:
             US_REGION=us-east-1,
             AP_NORTHEAST_REGION=ap-northeast-1,
             SLEEP_LAMBDA_NAME=${{ secrets.SLEEP_LAMBDA_NAME }}, 
-            TANE03_SLEEP_TABLE = ${{ secrets.TANE03_SLEEP_TABLE }},
+            TANE03_SLEEP_TABLE=${{ secrets.TANE03_SLEEP_TABLE }},
             HEALTH_BASELINE_TABLE=${{ secrets.HEALTH_BASELINE_TABLE }},
             USE_COGNITO=false
           }"
