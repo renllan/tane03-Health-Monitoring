@@ -5,7 +5,7 @@ FROM public.ecr.aws/lambda/nodejs:20
 COPY package*.json ${LAMBDA_TASK_ROOT}/
 
 # Install ALL dependencies (including devDependencies for tsc)
-RUN npm install
+RUN npm install --omit=dev
 
 # Copy the rest of the application code
 COPY . ${LAMBDA_TASK_ROOT}/

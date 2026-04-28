@@ -11,11 +11,6 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@aws-sdk/client-dynamodb": "^3.1022.0",
-    "@aws-sdk/client-lambda": "^3.1038.0",
-    "@aws-sdk/client-secrets-manager": "^3.1022.0",
-    "@aws-sdk/credential-providers": "^3.1022.0",
-    "@aws-sdk/lib-dynamodb": "^3.1022.0",
     "@vendia/serverless-express": "^4.12.0",
     "aws-amplify": "^6.0.0",
     "dotenv": "^16.0.0",
@@ -24,6 +19,11 @@
   },
   "type": "commonjs",
   "devDependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1022.0",
+    "@aws-sdk/client-lambda": "^3.1038.0",
+    "@aws-sdk/client-secrets-manager": "^3.1022.0",
+    "@aws-sdk/credential-providers": "^3.1022.0",
+    "@aws-sdk/lib-dynamodb": "^3.1022.0",
     "@types/express": "^4.17.0",
     "@types/node": "^25.6.0",
     "ts-node": "^10.9.1"
