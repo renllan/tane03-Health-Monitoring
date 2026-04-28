@@ -8,7 +8,7 @@ export const SleepService = {
     //get the sleep data from the repo if the date range has all the data
     //if not, calculate the missing data and save them to the repo
     //then return the full data
-    //if the date range has no data, calculate the full data and save them to the repo    
+    //if the date range has no sleep data stored in the datebase, calculate the full data and save them to the databse 
     async getSleepData(imei: string, startDate: string, endDate: string) {
         const sleepData: SleepData[] | null = await SleepRepo.querySleepData(imei, startDate, endDate);
         const days: number = (new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24) + 1;
