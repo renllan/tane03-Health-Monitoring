@@ -1,0 +1,106 @@
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { DynamoDBDocumentClient, GetCommand, QueryCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { SleepData } from "../types/sleepDataType";
+
+// Setup the DynamoDB Client
+const client = new DynamoDBClient({ region: process.env.AP_NORTHEAST_REGION });
+const docClient = DynamoDBDocumentClient.from(client);
+
+// Table: TanE_03_SleepAnalytics
+// HASH key:  imei (S)
+// RANGE key: date (S) — format: "YYYY-MM-DD"
+
+const TABLE_NAME = process.env.TanE03_SLEEP_TABLE;
+
+// Map raw DynamoDB item → SleepData type (deserializes segments string → object)
+function mapToSleepData(item: Record<string, any>): SleepData {
+    return {
+        imei: item.imei,
+        date: item.date,
+        minutes: item.minutes,
+        sleepScore: item.sleepScore,
+        segments: typeof item.segments === "string" ? JSON.parse(item.segments) : item.segments,
+        avgHR: item.avgHR,
+        minHR: item.minHR,
+        rmssd: item.rmssd,
+        rhr: item.rhr,
+        rhrTime: item.rhrTime,
+        wakeUps: item.wakeUps,
+    };
+}
+
+export const SleepRepo = {
+
+    // Fetch a single night's sleep record by exact date
+    async getSleepData(deviceId: string, date: string): Promise<SleepData | null> {
+        const command = new GetCommand({
+            TableName: TABLE_NAME,
+            Key: {
+                imei: deviceId,
+                date   // "YYYY-MM-DD"
+            }
+        });
+        const response = await docClient.send(command);
+        if (!response.Item) return null;
+        return mapToSleepData(response.Item);
+    },
+
+    async queryRHR(deviceID: string, startDate: string, endDate: string): Promise<number[]> {
+        const command = new QueryCommand({
+            TableName: TABLE_NAME,
+            KeyConditionExpression: "imei = :imei AND #date BETWEEN :startDate AND :endDate",
+            ExpressionAttributeNames: {
+                "#date": "date"   // alias because "date" is a DynamoDB reserved word!
+            },
+            ExpressionAttributeValues: {
+                ":imei": deviceID,
+                ":startDate": startDate,    // "YYYY-MM-DD"
+                ":endDate": endDate         // "YYYY-MM-DD"
+            },
+            ScanIndexForward: true,         // Ascending date order (oldest → newest)
+            ProjectionExpression: "imei, #date, rhr, rhrTime"
+        });
+        const response = await docClient.send(command);
+        return (response.Items || []).map(item => item.rhr);
+    },
+    // Fetch sleep records over a date range (e.g. last 28 days for baseline)
+    async querySleepData(deviceId: string, startDate: string, endDate: string): Promise<SleepData[]> {
+        const command = new QueryCommand({
+            TableName: TABLE_NAME,
+            KeyConditionExpression: "imei = :imei AND #date BETWEEN :startDate AND :endDate",
+            ExpressionAttributeNames: {
+                "#date": "date"   // alias because "date" is a DynamoDB reserved word!
+            },
+            ExpressionAttributeValues: {
+                ":imei": deviceId,
+                ":startDate": startDate,    // "YYYY-MM-DD"
+                ":endDate": endDate         // "YYYY-MM-DD"
+            },
+            ScanIndexForward: true          // Ascending date order (oldest → newest)
+        });
+        const response = await docClient.send(command);
+        return (response.Items || []).map(mapToSleepData);
+    },
+
+
+    async saveSleep(data: SleepData): Promise<void> {
+        const command = new PutCommand({
+            TableName: TABLE_NAME,
+            Item: {
+                imei: data.imei,
+                date: data.date,
+                minutes: data.minutes,
+                sleepScore: data.sleepScore,
+                segments: JSON.stringify(data.segments),  // serialize array → string for DynamoDB
+                avgHR: data.avgHR,
+                minHR: data.minHR,
+                rmssd: data.rmssd,
+                rhr: data.rhr,
+                rhrTime: data.rhrTime,
+                wakeUps: data.wakeUps,
+                updatedAt: new Date().toISOString()
+            }
+        });
+        await docClient.send(command);
+    }
+};

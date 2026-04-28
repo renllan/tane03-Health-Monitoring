@@ -1,5 +1,5 @@
 const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
-const { DynamoDBDocumentClient, GetCommand } = require("@aws-sdk/lib-dynamodb");
+const { DynamoDBDocumentClient, GetCommand, QueryCommand } = require("@aws-sdk/lib-dynamodb");
 // Setup the DynamoDB Client
 const client = new DynamoDBClient({ region: process.env.US_REGION });
 const docClient = DynamoDBDocumentClient.from(client);
@@ -36,7 +36,7 @@ export const HeartRateRepo = {
 
         const response = await docClient.send(
             new QueryCommand({
-                TableName: TABLE_NAME,
+                TableName: process.env.HEALTH_DATA_TABLE,
                 KeyConditionExpression: "deviceId = :deviceId AND #typeTime <= :targetDate",
                 ExpressionAttributeNames: {
                     "#typeTime": "type#timestamp"
@@ -66,7 +66,7 @@ export const HeartRateRepo = {
 
         const response = await docClient.send(
             new QueryCommand({
-                TableName: TABLE_NAME,
+                TableName: process.env.HEALTH_DATA_TABLE,
                 KeyConditionExpression: "deviceId = :deviceId AND #typeTime >= :startDate",
                 ExpressionAttributeNames: {
                     "#typeTime": "type#timestamp"
@@ -82,26 +82,64 @@ export const HeartRateRepo = {
 
     //return heartrate data for the last hour given timestamp
     async getLastHourData(imei, timestamp) {
-        const thirtyMinutesAgo = new Date(timestamp);
+        const timeInMillis = Number(timestamp) * 1000;
+
+        const thirtyMinutesAgo = new Date(timeInMillis);
         thirtyMinutesAgo.setMinutes(thirtyMinutesAgo.getMinutes() - 30);
 
-        const thirtyMinutesLater = new Date(timestamp);
+        const thirtyMinutesLater = new Date(timeInMillis);
         thirtyMinutesLater.setMinutes(thirtyMinutesLater.getMinutes() + 30);
 
         const response = await docClient.send(
             new QueryCommand({
-                TableName: TABLE_NAME,
-                KeyConditionExpression: "deviceId = :deviceId AND #typeTime BETWEEN :startDate AND :endDate",
+                TableName: process.env.HEALTH_DATA_TABLE,
+                KeyConditionExpression: "deviceId = :deviceId AND #sortKey BETWEEN :startDate AND :endDate",
                 ExpressionAttributeNames: {
-                    "#typeTime": "type#timestamp"
+                    "#sortKey": "timestamp#type"
                 },
                 ExpressionAttributeValues: {
                     ":deviceId": imei,
-                    ":startDate": `heartrate#${thirtyMinutesAgo.toISOString()}`,
-                    ":endDate": `heartrate#${thirtyMinutesLater.toISOString()}`,
+                    ":startDate": `${thirtyMinutesAgo.toISOString()}#heartrate`,
+                    ":endDate": `${thirtyMinutesLater.toISOString()}#heartrate`,
                 }
             })
         );
         return response.Items || [];
+    },
+
+    // Query all heartRate readings in a date range using the byDeviceAndType GSI.
+    // Returns items with { timestamp, value } — used by the HRV backfill service
+    // to find which hourly windows need HRV calculated.
+    async getHeartRateByDateRange(imei, startISO, endISO) {
+        const allItems = [];
+        let lastKey = undefined;
+
+        do {
+            const response = await docClient.send(
+                new QueryCommand({
+                    TableName: process.env.HEALTH_DATA_TABLE,
+                    IndexName: "byDeviceAndType",
+                    KeyConditionExpression: "deviceId = :d AND #sk BETWEEN :from AND :to",
+                    ExpressionAttributeNames: { "#sk": "type#timestamp" },
+                    ExpressionAttributeValues: {
+                        ":d":    imei,
+                        ":from": `heartRate#${startISO}`,
+                        ":to":   `heartRate#${endISO}`,
+                    },
+                    ProjectionExpression: "#ts, #val",
+                    ExpressionAttributeNames: {
+                        "#sk":  "type#timestamp",
+                        "#ts":  "timestamp",
+                        "#val": "value"
+                    },
+                    ExclusiveStartKey: lastKey
+                })
+            );
+            allItems.push(...(response.Items || []));
+            lastKey = response.LastEvaluatedKey;
+        } while (lastKey);
+
+        return allItems;
     }
 };
+
