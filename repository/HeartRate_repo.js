@@ -105,5 +105,41 @@ export const HeartRateRepo = {
             })
         );
         return response.Items || [];
+    },
+
+    // Query all heartRate readings in a date range using the byDeviceAndType GSI.
+    // Returns items with { timestamp, value } — used by the HRV backfill service
+    // to find which hourly windows need HRV calculated.
+    async getHeartRateByDateRange(imei, startISO, endISO) {
+        const allItems = [];
+        let lastKey = undefined;
+
+        do {
+            const response = await docClient.send(
+                new QueryCommand({
+                    TableName: process.env.HEALTH_DATA_TABLE,
+                    IndexName: "byDeviceAndType",
+                    KeyConditionExpression: "deviceId = :d AND #sk BETWEEN :from AND :to",
+                    ExpressionAttributeNames: { "#sk": "type#timestamp" },
+                    ExpressionAttributeValues: {
+                        ":d":    imei,
+                        ":from": `heartRate#${startISO}`,
+                        ":to":   `heartRate#${endISO}`,
+                    },
+                    ProjectionExpression: "#ts, #val",
+                    ExpressionAttributeNames: {
+                        "#sk":  "type#timestamp",
+                        "#ts":  "timestamp",
+                        "#val": "value"
+                    },
+                    ExclusiveStartKey: lastKey
+                })
+            );
+            allItems.push(...(response.Items || []));
+            lastKey = response.LastEvaluatedKey;
+        } while (lastKey);
+
+        return allItems;
     }
 };
+
