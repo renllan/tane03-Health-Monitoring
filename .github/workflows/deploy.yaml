@@ -80,6 +80,8 @@ jobs:
             AAASWatch_BASE_URL=${{ secrets.AAASWatch_BASE_URL }},
             US_REGION=us-east-1,
             AP_NORTHEAST_REGION=ap-northeast-1,
+            Sleep_Lambda_Name=${{ secrets.SLEEP_LAMBDA_NAME }}, 
+            TANE03_SLEEP_TABLE = ${{ secrets.TANE03_SLEEP_TABLE }}
             USE_COGNITO=false
           }"
 

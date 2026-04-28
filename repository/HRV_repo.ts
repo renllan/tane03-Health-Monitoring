@@ -5,13 +5,14 @@ const client = new DynamoDBClient({ region: process.env.AP_NORTHEAST_REGION });
 const docClient = DynamoDBDocumentClient.from(client);
 import { HRVData } from "../types/HRVType";
 
+const TABLE_NAME = process.env.TANE03_HRV_TABLE;
 
 export const HRV_repo = {
     async getLastHourData(imei: string, timestamp: string, type: string) {
         //round to the nearest hour
         const roundedTimestamp = Math.floor(Number(timestamp) / 3600) * 3600;
         const command = new GetCommand({
-            TableName: process.env.TanE03_HRV_Table,
+            TableName: TABLE_NAME,
             Key: {
                 "imei": imei,
                 "type#timestamp": `${type}#${roundedTimestamp}`
@@ -24,7 +25,7 @@ export const HRV_repo = {
 
     async saveHRV(data: HRVData) {
         const command = new PutCommand({
-            TableName: process.env.TanE03_HRV_Table,
+            TableName: TABLE_NAME,
             Item: {
                 "imei": data.imei,
                 "type#timestamp": `${data.type}#${data.timestamp}`, // <--- The composite key!
@@ -44,7 +45,7 @@ export const HRV_repo = {
 
         const queryForType = async (type: string) => {
             const command = new QueryCommand({
-                TableName: process.env.TanE03_HRV_Table,
+                TableName: TABLE_NAME,
                 KeyConditionExpression: "imei = :imei AND #sk BETWEEN :startSk AND :endSk",
                 ExpressionAttributeNames: {
                     "#sk": "type#timestamp"
