@@ -3,10 +3,12 @@ import { notificationController } from '../controller/notificationController';
 import { ASSWatchLoginController } from '../controller/ASSWatchLoginController';
 import hrvRoutes from './hrv_routes';
 import baselineRoutes from './baseline_routes';
+import evaluationRoutes from './evaluation_routes';
 
 const router = Router();
 router.use('/', hrvRoutes);
 router.use('/', baselineRoutes);
+router.use('/', evaluationRoutes);
 
 // Define routes
 router.post('/send-notification', async (req, res) => {

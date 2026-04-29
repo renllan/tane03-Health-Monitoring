@@ -10,7 +10,7 @@ export async function sendNotification(imei: string, message: string): Promise<{
       let lastErrorStatus = 0;
       let lastErrorBody = "";
 
-      for (let attempt = 1; attempt <= 3; attempt++) {
+      for (let attempt = 1; attempt <= 1; attempt++) {
          try {
             response = await fetch(`${process.env.AAASWatch_BASE_URL}/downlinkMessage/${imei}/send`, {
                method: 'POST',

@@ -45,7 +45,7 @@ export const SleepRepo = {
         return mapToSleepData(response.Item);
     },
 
-    async queryRHR(deviceID: string, startDate: string, endDate: string): Promise<number[]> {
+    async queryRHR(deviceID: string, startDate: string, endDate: string): Promise<{ imei: string; date: string; rhr: number }[]> {
         const command = new QueryCommand({
             TableName: TABLE_NAME,
             KeyConditionExpression: "imei = :imei AND #date BETWEEN :startDate AND :endDate",
@@ -61,7 +61,11 @@ export const SleepRepo = {
             ProjectionExpression: "imei, #date, rhr, rhrTime"
         });
         const response = await docClient.send(command);
-        return (response.Items || []).map(item => item.rhr);
+        return (response.Items || []).map(item => ({
+            imei: item.imei,
+            date: item.date,
+            rhr: item.rhr,
+        }));
     },
     // Fetch sleep records over a date range (e.g. last 28 days for baseline)
     async querySleepData(deviceId: string, startDate: string, endDate: string): Promise<SleepData[]> {

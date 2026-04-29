@@ -11,7 +11,7 @@ const table_name = process.env.HEALTH_BASELINE_TABLE;
 
 //get the baseline data from the repo
 export const BaselineRepo = {
-    async getBaseline(imei: string, type: string) {
+    async getBaseline(imei: string, type: string): Promise<BaselineData | undefined> {
         const command = new GetCommand({
             TableName: table_name,
             Key: {
@@ -19,7 +19,7 @@ export const BaselineRepo = {
             }
         });
         const response = await docClient.send(command);
-        return response.Item;
+        return response.Item as BaselineData | undefined;
     },
     //save the baseline data to the repo
     async saveBaseline(data: BaselineData) {

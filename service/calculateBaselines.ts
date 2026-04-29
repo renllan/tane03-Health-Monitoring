@@ -5,7 +5,7 @@ import { sendNotification } from "./sendNotification";
 import { BaselineData, BaselineType } from "../types/baselineType";
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-export type Level = "Good" | "Fair" | "Poor";
+export type Level = "Good" | "Fair" | "Poor" | "Invalid";
 
 export interface BaselineResult {
     status: "Success" | "Error";
@@ -325,69 +325,6 @@ export const calculateBaselines = {
     },
 
 
-    // ── Day-Level Evaluators ──────────────────────────────────────────────────
-    // Compares today's value against the baseline using the spec thresholds.
-
-    /** Sleep Score: ±5 points threshold */
-    async evaluateDayLevelSleepScore(imei: string, current: number, baseline: number): Promise<Level> {
-        const level = evaluateDayLevel(current, baseline, 5, "other");
-        if (level === "Poor") await sendNotification(imei, "Your Sleep Score dropped significantly today. Try to rest!");
-        if (level === "Good") await sendNotification(imei, "Your Sleep Score was excellent. Keep it up!");
-        return level;
-    },
-
-    /** Sleep Duration: ±30 minutes threshold */
-    async evaluateDayLevelSleepDuration(imei: string, current: number, baseline: number): Promise<Level> {
-        const level = evaluateDayLevel(current, baseline, baseline * 0.3, "other");
-        if (level === "Poor") await sendNotification(imei, "Your sleep duration was unusually short. Consider an early bedtime!");
-        if (level === "Good") await sendNotification(imei, "Your sleep duration was excellent. Keep it up!");
-        return level;
-    },
-
-    /** RHR: ±2 bpm threshold (higher than baseline = Poor) */
-    async evaluateDayLevelRHR(imei: string, current: number, baseline: number): Promise<Level> {
-        const level = evaluateDayLevel(current, baseline, baseline * 0.10, "rhr");
-        if (level === "Poor") await sendNotification(imei, "Your Resting Heart Rate is elevated. Your body might be under stress or recovering.");
-        if (level === "Good") await sendNotification(imei, "Your Resting Heart Rate is excellent");
-        return level;
-    },
-
-    /** HRV (RMSSD / SDNN): ±5% of baseline threshold */
-    async evaluateDayLevelHRV(imei: string, current: number, baseline: number): Promise<Level> {
-        const level = evaluateDayLevel(current, baseline, baseline * 0.05, "other");
-        if (level === "Poor") await sendNotification(imei, "Your Heart Rate Variability is low today, indicating high stress or poor recovery.");
-        if (level === "Good") await sendNotification(imei, "Your Heart Rate Variability is excellent");
-        return level;
-    },
-
-
-    // ── Week-Level Evaluators ─────────────────────────────────────────────────
-    // Accepts an array of 4 weekly averages and evaluates the trend slope.
-
-    /** Sleep Score Trend: ±1.5 points/week */
-    evaluateWeekTrendSleepScore(weeklyAverages: number[]): Level {
-        return evaluateWeekLevel(calculateSlope(weeklyAverages), 1.5, "other");
-    },
-
-    /** Sleep Duration Trend: ±15 minutes/week */
-    evaluateWeekTrendSleepDuration(weeklyAverages: number[]): Level {
-        return evaluateWeekLevel(calculateSlope(weeklyAverages), 15, "other");
-    },
-
-    /** RHR Trend: ±1.0 bpm/week (rising slope = Poor) */
-    evaluateWeekTrendRHR(weeklyAverages: number[]): Level {
-        return evaluateWeekLevel(calculateSlope(weeklyAverages), 1.0, "rhr");
-    },
-
-    /** RMSSD Trend: ±3 ms/week */
-    evaluateWeekTrendRMSSD(weeklyAverages: number[]): Level {
-        return evaluateWeekLevel(calculateSlope(weeklyAverages), 3, "other");
-    },
-
-    /** SDNN Trend: ±3 ms/week */
-    evaluateWeekTrendSDNN(weeklyAverages: number[]): Level {
-        return evaluateWeekLevel(calculateSlope(weeklyAverages), 3, "other");
-    },
 
     // ── Private Helper ────────────────────────────────────────────────────────
 
