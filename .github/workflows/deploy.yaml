@@ -81,6 +81,7 @@ jobs:
             SLEEP_LAMBDA_NAME=${{ secrets.SLEEP_LAMBDA_NAME }}, 
             TANE03_SLEEP_TABLE=${{ secrets.TANE03_SLEEP_TABLE }},
             HEALTH_BASELINE_TABLE=${{ secrets.HEALTH_BASELINE_TABLE }},
+            TANE03_HRV_TABLE=${{ secrets.TANE03_HRV_TABLE }},
             USE_COGNITO=false
           }"
 

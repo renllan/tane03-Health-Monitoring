@@ -5,7 +5,7 @@ const client = new DynamoDBClient({ region: process.env.AP_NORTHEAST_REGION });
 const docClient = DynamoDBDocumentClient.from(client);
 import { HRVData } from "../types/HRVType";
 
-const TABLE_NAME = process.env.TanE03_HRV_TABLE;
+const TABLE_NAME = process.env.TANE03_HRV_TABLE;
 
 export const HRV_repo = {
     async getLastHourData(imei: string, timestamp: string, type: string) {

@@ -73,7 +73,7 @@ export const SleepService = {
     //return the sleep data
     async calculateSleepData(imei: string, date: string, timezone: string): Promise<SleepData> {
         const command = new InvokeCommand({
-            FunctionName: process.env.Sleep_Lambda_Name,
+            FunctionName: process.env.SLEEP_LAMBDA_NAME,
             InvocationType: "RequestResponse",
             // detectSleepSegments reads from event.arguments.
             // anchorDate is the target date at 18:00; days=1 returns only that day.

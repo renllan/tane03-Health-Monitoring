@@ -10,7 +10,7 @@ const docClient = DynamoDBDocumentClient.from(client);
 // HASH key:  imei (S)
 // RANGE key: date (S) — format: "YYYY-MM-DD"
 
-const TABLE_NAME = process.env.TanE03_SLEEP_TABLE;
+const TABLE_NAME = process.env.TANE03_SLEEP_TABLE;
 
 // Map raw DynamoDB item → SleepData type (deserializes segments string → object)
 function mapToSleepData(item: Record<string, any>): SleepData {
