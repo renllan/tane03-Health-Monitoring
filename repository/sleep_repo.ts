@@ -44,7 +44,28 @@ export const SleepRepo = {
         if (!response.Item) return null;
         return mapToSleepData(response.Item);
     },
-
+    async querySleepAvgHeartrate(deviceID: string, startDate: string, endDate: string) {
+        const command = new QueryCommand({
+            TableName: TABLE_NAME,
+            KeyConditionExpression: "imei = :imei AND #date BETWEEN :startDate AND :endDate",
+            ExpressionAttributeNames: {
+                "#date": "date"   // alias because "date" is a DynamoDB reserved word!
+            },
+            ExpressionAttributeValues: {
+                ":imei": deviceID,
+                ":startDate": startDate,    // "YYYY-MM-DD"
+                ":endDate": endDate         // "YYYY-MM-DD"
+            },
+            ScanIndexForward: true,         // Ascending date order (oldest → newest)
+            ProjectionExpression: "imei, #date, avgHR"
+        });
+        const response = await docClient.send(command);
+        return (response.Items || []).map(item => ({
+            imei: item.imei,
+            date: item.date,
+            avgHR: item.avgHR,
+        }));
+    },
     async queryRHR(deviceID: string, startDate: string, endDate: string): Promise<{ imei: string; date: string; rhr: number }[]> {
         const command = new QueryCommand({
             TableName: TABLE_NAME,
@@ -58,7 +79,7 @@ export const SleepRepo = {
                 ":endDate": endDate         // "YYYY-MM-DD"
             },
             ScanIndexForward: true,         // Ascending date order (oldest → newest)
-            ProjectionExpression: "imei, #date, rhr, rhrTime"
+            ProjectionExpression: "imei, #date, rhr"
         });
         const response = await docClient.send(command);
         return (response.Items || []).map(item => ({

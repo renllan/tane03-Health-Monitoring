@@ -130,7 +130,6 @@ async function calculateHRVForTimeRange(imei: string, startTime: string, endTime
                     const results = await calculateHRV(imei, timestamp);
                     return { timestamp, ...results };
                 } catch (error: any) {
-                    console.warn(`[Batch Error] imei: ${imei}, ts: ${timestamp} - ${error.message}`);
                     return null;
                 }
             })

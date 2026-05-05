@@ -101,6 +101,15 @@ export const SleepService = {
 
         // Lambda omits imei from the result — inject it back before saving
         return { ...results[0], imei } as SleepData;
-    }
+    },
 
+    async querySleepAvgHeartRate(imei: string, startDate: string, endDate: string) {
+        const data = await SleepRepo.querySleepAvgHeartrate(imei, startDate, endDate);
+        if (data.length === 0) {
+            await this.getSleepData(imei, startDate, endDate);
+            return await SleepRepo.querySleepAvgHeartrate(imei, startDate, endDate);
+        }
+        return data;
+
+    }
 }

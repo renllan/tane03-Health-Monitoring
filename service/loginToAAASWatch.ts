@@ -6,31 +6,39 @@ import { fromCognitoIdentityPool } from '@aws-sdk/credential-providers';
 import { LoginResponse } from "../types/loginType";
 import { DeviceGroupRepo } from "../repository/DeviceGroup_repo";
 
+const tokenCache: Record<string, { token: string; expiry: number }> = {};
+
 export async function loginToAAASWatch(imei: string): Promise<string> {
+    // Check cache (assume token is valid for 1 hour, we cache for 50 mins)
+    const cached = tokenCache[imei];
+    if (cached && cached.expiry > Date.now()) {
+        return cached.token;
+    }
+
     try {
         const { username, password } = await getDeviceUsername(imei);
-        console.log("username", username);
-        console.log("password", password);
         const response = await fetch(`${process.env.AAASWatch_BASE_URL}/login`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                email: username,
-                password: password,
-            }),
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: username, password }),
         });
+
         if (!response.ok) {
             const errorText = await response.text();
             throw new Error(`Login failed with status ${response.status}: ${errorText}`);
         }
+
         const loginData: LoginResponse = await response.json();
+        const token = loginData.data.token;
 
+        // Cache the token for 50 minutes (3000000 ms)
+        tokenCache[imei] = {
+            token,
+            expiry: Date.now() + 50 * 60 * 1000
+        };
 
-        return loginData.data.token;
-    }
-    catch (error) {
+        return token;
+    } catch (error) {
         console.error("Error logging in:", error);
         throw error;
     }

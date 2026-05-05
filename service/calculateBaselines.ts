@@ -3,6 +3,7 @@ import { SleepService } from "./sleepService";
 import { HRVService } from "./calculateHRV";
 import { sendNotification } from "./sendNotification";
 import { BaselineData, BaselineType } from "../types/baselineType";
+import { SleepRepo } from "../repository/sleep_repo";
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export type Level = "Good" | "Fair" | "Poor" | "Invalid";
@@ -75,51 +76,7 @@ function calculateSlope(weeklyAverages: number[]): number {
     return denominator === 0 ? 0 : numerator / denominator;
 }
 
-// ─── Level Evaluators ─────────────────────────────────────────────────────────
 
-/**
- * Compares a single day's value against its baseline.
- *
- * For RHR  : above baseline+threshold → Poor; below baseline-threshold → Good
- * For others: above baseline+threshold → Good; below baseline-threshold → Poor
- */
-function evaluateDayLevel(
-    current: number,
-    baseline: number,
-    threshold: number,
-    metric: "rhr" | "other"
-): Level {
-    const diff = current - baseline;
-    if (metric === "rhr") {
-        if (diff > threshold) return "Poor";
-        if (diff < -threshold) return "Good";
-    } else {
-        if (diff > threshold) return "Good";
-        if (diff < -threshold) return "Poor";
-    }
-    return "Fair";
-}
-
-/**
- * Evaluates the 4-week trend slope against the spec threshold.
- *
- * For RHR  : rising slope → Poor; falling slope → Good
- * For others: rising slope → Good; falling slope → Poor
- */
-function evaluateWeekLevel(
-    slope: number,
-    threshold: number,
-    metric: "rhr" | "other"
-): Level {
-    if (metric === "rhr") {
-        if (slope > threshold) return "Poor";
-        if (slope < -threshold) return "Good";
-    } else {
-        if (slope > threshold) return "Good";
-        if (slope < -threshold) return "Poor";
-    }
-    return "Fair";
-}
 
 // ─── Main Export ──────────────────────────────────────────────────────────────
 
@@ -197,12 +154,31 @@ export const calculateBaselines = {
         );
     },
 
-    async getBloodPressureBaseline(imei: string): Promise<BaselineResult> {
-        // TODO: Implement calculation when BP logic is added
-        return { status: "Error", message: "Blood Pressure calculation not implemented yet." };
+    async getSleepAvgHRBaseline(imei: string): Promise<BaselineResult> {
+        return this._getOrCalculate(
+            imei,
+            BaselineType.SleepAvgHR,
+            () => this.calculateSleepAvgHRBaseline(imei)
+        );
     },
 
 
+    async calculateSleepAvgHRBaseline(imei: string): Promise<BaselineResult> {
+        console.log("calculating sleep baseline for imei", imei)
+        const startDate = getDateOffset(-28);
+        const endDate = getDateOffset(-1);
+        const records = await SleepRepo.querySleepAvgHeartrate(imei, startDate, endDate);
+
+        if (records.length < 7) {
+            return { status: "Error", message: "Not enough sleep data for baseline calculation." };
+        }
+        // Iterate over the last 4 weeks backwards
+
+        return {
+            status: "Success",
+            baseline: slidingWindowBaseline(records.map((r: any) => r.avgHR), "min"),
+        }
+    },
 
     // ── Sleep Baseline ────────────────────────────────────────────────────────
 
@@ -212,6 +188,7 @@ export const calculateBaselines = {
      * Excludes days with missing or zero sleep score / duration.
      */
     async calculateSleepBaseline(imei: string): Promise<BaselineResult> {
+        console.log("calculating sleep baseline for imei", imei)
         const startDate = getDateOffset(-28); // D-28
         const endDate = getDateOffset(-1);  // D-1
 
@@ -238,6 +215,7 @@ export const calculateBaselines = {
      * Query range: D-28 to D-1.
      */
     async calculateRHRBaseline(imei: string): Promise<BaselineResult> {
+        console.log("calculating rhr baseline for imei", imei)
         const startDate = getDateOffset(-28);
         const endDate = getDateOffset(-1);
 
@@ -265,6 +243,8 @@ export const calculateBaselines = {
      * Query range: D-28 to D-1.
      */
     async calculateRMSSDBaseline(imei: string): Promise<BaselineResult> {
+        console.log("calculating rmssdd baseline for imei", imei)
+
         const startDate = getDateOffset(-28);
         const endDate = getDateOffset(-1);
 
@@ -299,6 +279,7 @@ export const calculateBaselines = {
      * Query range: D-28 to D-1.
      */
     async calculateSDNNBaseline(imei: string): Promise<BaselineResult> {
+        console.log("calculating sddn baseline for imei", imei)
         const startDate = getDateOffset(-28);
         const endDate = getDateOffset(-1);
 

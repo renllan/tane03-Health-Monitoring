@@ -4,12 +4,13 @@ import { ASSWatchLoginController } from '../controller/ASSWatchLoginController';
 import hrvRoutes from './hrv_routes';
 import baselineRoutes from './baseline_routes';
 import evaluationRoutes from './evaluation_routes';
+import schedulerRoutes from './scheduler_route';
 
 const router = Router();
 router.use('/', hrvRoutes);
 router.use('/', baselineRoutes);
 router.use('/', evaluationRoutes);
-
+router.use('/', schedulerRoutes);
 // Define routes
 router.post('/send-notification', async (req, res) => {
   try {

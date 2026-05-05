@@ -9,6 +9,5 @@ router.get('/evaluate/:imei/day', (req, res) => evaluationController.evaluateDay
 
 // Week-level trend evaluation — pass weekly averages as comma-separated query params
 // GET /api/evaluate/:imei/week?sleepScore=80,77,74,70&rhr=54,55,56,58&rmssd=30,33,36,40
-router.get('/evaluate/:imei/week', (req, res) => evaluationController.evaluateWeek(req, res));
 
 export default router;
