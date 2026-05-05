@@ -13,23 +13,25 @@ export class SchedulerController {
             // Typically, req.body or event.body contains the payload
             // Since the original was an API Gateway lambda with event.body,
             // mapping it to Express req.body for a typical Node framework setup.
-            const { userId, userQuery, preferredHour, preferredMinute, timezone } = req.body;
+            const { imei } = req.params;
+            const { preferredHour, preferredMinute, timezone } = req.body;
 
-            if (!userId || !preferredHour || !preferredMinute) {
+            if (!imei || !preferredHour || !preferredMinute || !timezone) {
                 res.status(400).json({ error: "Missing required fields" });
                 return;
             }
 
             await this.schedulerService.createOrUpdateEvaluationSchedule(
-                userId,
-                userQuery,
+                imei,
                 preferredHour,
                 preferredMinute,
                 timezone
             );
 
             res.status(200).json({ message: "Schedule updated successfully" });
+            console.log("Schedule updated successfully");
         } catch (error) {
+            console.log(error);
             console.error("Error updating schedule:", error);
             res.status(500).json({ error: "Internal server error" });
         }
