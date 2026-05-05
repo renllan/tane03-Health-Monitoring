@@ -6,6 +6,7 @@ export enum BaselineType {
     Bloodpressure = "Bloodpressure",
     SleepDuration = "SleepDuration",
     SleepScore = "SleepScore",
+    SleepAvgHR = "SleepAvgHeartRate",
     RHR = "RHR",
 
 }
