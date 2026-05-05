@@ -7,26 +7,26 @@ export class SchedulerService {
         this.schedulerRepo = new SchedulerRepo();
     }
 
-    async createOrUpdateEvaluationSchedule(userId: string, userQuery: string, preferredHour: string, preferredMinute: string, timezone: string): Promise<void> {
+    async createOrUpdateEvaluationSchedule(imei: string, preferredHour: string, preferredMinute: string, timezone: string): Promise<void> {
         // Convert "9:30" to cron(30 9 * * ? *)
         const scheduleExpression = `cron(${preferredMinute} ${preferredHour} * * ? *)`;
-        const scheduleName = `HealthCheck-User-${userId}`;
+        const scheduleName = `HealthCheck-User-${imei}`;
 
         const scheduleConfig = {
             Name: scheduleName,
             ScheduleExpression: scheduleExpression,
             ScheduleExpressionTimezone: timezone || "UTC", // Support local time!
             Target: {
-                Arn: process.env.DETECTION_LAMBDA_ARN,
+                Arn: process.env.HEALTH_MONITORING_LAMBDA_ARN,
                 RoleArn: process.env.SCHEDULER_ROLE_ARN,
                 Input: JSON.stringify({
                     httpMethod: "POST", // Assuming POST for evaluation. Change to GET if needed.
-                    path: `/evaluate/${userId}/day`,
+                    path: `/evaluate/${imei}/day`,
                     resource: "/evaluate/{imei}/day",
                     pathParameters: {
-                        imei: userId
+                        imei: imei
                     },
-                    body: JSON.stringify({ query: userQuery }),
+                    body: JSON.stringify({}),
                     requestContext: {}
                 }),
             },
