@@ -66,6 +66,7 @@ export const EvaluationService = {
 
     /** Sleep Score: ±5 points threshold */
     async evaluateDayLevelSleepScore(imei: string): Promise<Level> {
+        console.log("evaluate Day Level SleepScore")
         const today = getDateOffset(0);
         const previousSevenDays = getDateOffset(-7);
         const sleepData = await SleepService.getSleepData(imei, previousSevenDays, today);
@@ -87,6 +88,8 @@ export const EvaluationService = {
 
     /** Sleep Duration: ±30% of baseline threshold */
     async evaluateDayLevelSleepDuration(imei: string): Promise<Level> {
+        console.log("evaluate Day Level sleep Duration")
+
         const today = getDateOffset(0);
         const previousSevenDays = getDateOffset(-7);
 
@@ -110,6 +113,7 @@ export const EvaluationService = {
 
     /** RHR: ±10% of baseline threshold (higher than baseline = Poor) */
     async evaluateDayLevelRHR(imei: string): Promise<Level> {
+        console.log("evaluate Day Level RHR")
         const today = getDateOffset(0);
         const previousSevenDays = getDateOffset(-7);
 
@@ -133,6 +137,7 @@ export const EvaluationService = {
 
     /** HRV (RMSSD + SDNN): ±5% of baseline threshold */
     async evaluateDayLevelHRV(imei: string): Promise<{ RMSSDlevel: Level; SDNNlevel: Level }> {
+        console.log("evaluate Day Level HRV")
         const today = getDateOffset(0);
         const previousSevenDays = getDateOffset(-7);
 
@@ -146,7 +151,6 @@ export const EvaluationService = {
         const sdnnValues = hrvRecords.map(r => r.sdnn).filter(v => v > 0);
 
         if (!rmssdValues.length && !sdnnValues.length) {
-            await sendNotification(imei, "Cannot evaluate HRV today, does not have today's HRV data");
             return { RMSSDlevel: "Invalid", SDNNlevel: "Invalid" };
         }
 
@@ -179,7 +183,6 @@ export const EvaluationService = {
             SDNNlevel = evaluateDayLevel(currentSDNN, SDNNbaselineResult.baseline, SDNNbaselineResult.baseline * 0.3, "other");
             if (SDNNlevel === "Poor") sendNotification(imei, "Your HRV (SDNN) is low today, indicating high stress or poor recovery.");
         }
-
         return { RMSSDlevel, SDNNlevel };
     },
 
@@ -194,7 +197,11 @@ export const EvaluationService = {
         if (!sleepHeartRateData.length) {
             return "Invalid";
         }
-        const sleepHeartRate = sleepHeartRateData.reduce((acc, item) => acc + item.avgHR, 0) / sleepHeartRateData.length;  //average of last 7 days
+        const sleepHeartRateValues = sleepHeartRateData.map(r => r.avgHR).filter(v => v > 0);
+        if (!sleepHeartRateValues.length) {
+            return "Invalid";
+        }
+        const sleepHeartRate = sleepHeartRateValues.reduce((acc, item) => acc + item.avgHR, 0) / sleepHeartRateData.length;  //average of last 7 days
         if (!sleepHeartRate || sleepHeartRate <= 0) {
             return "Invalid";
         }

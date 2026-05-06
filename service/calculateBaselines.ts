@@ -90,12 +90,14 @@ export const calculateBaselines = {
         resultBuilder: (baselineValue: number) => BaselineResult = (val) => ({ status: "Success", baseline: val })
     ): Promise<BaselineResult> {
         // 1. Get from database first
+        console.log(`get ${type} baseline for imei ${imei}`)
         const cached = await BaselineRepo.getBaseline(imei, type);
         if (cached) {
             return resultBuilder(cached.baselineValue);
         }
 
         // 2. Calculate if missing
+        console.log(`calculate ${type} baseline for imei ${imei}`)
         const result = await calculateFn();
         if (result.status === "Success") {
             const val = valueExtractor(result);
@@ -167,10 +169,11 @@ export const calculateBaselines = {
         console.log("calculating sleep baseline for imei", imei)
         const startDate = getDateOffset(-28);
         const endDate = getDateOffset(-1);
-        const records = await SleepRepo.querySleepAvgHeartrate(imei, startDate, endDate);
-
-        if (records.length < 7) {
-            return { status: "Error", message: "Not enough sleep data for baseline calculation." };
+        const records = await SleepService.querySleepAvgHeartRate(imei, startDate, endDate);
+        const valid = records.filter((r: any) => r.avgHR && r.avgHR > 0);
+        if (valid.length < 7) {
+            console.log("Not enough sleep avg HR data for baseline calculation.")
+            return { status: "Error", message: "Not enough sleep avg HR data even after calculation. Requires at least 7 valid days." };
         }
         // Iterate over the last 4 weeks backwards
 
@@ -197,6 +200,7 @@ export const calculateBaselines = {
         const valid = records.filter((r: any) => r.sleepScore > 0 && r.minutes > 0);
 
         if (valid.length < 7) {
+            console.log("Not enough sleep data for baseline calculation.")
             return { status: "Error", message: "Not enough sleep data even after calculation. Requires at least 7 valid days." };
         }
 
@@ -224,6 +228,7 @@ export const calculateBaselines = {
         const valid = records.filter((r: any) => r.rhr > 0);
 
         if (valid.length < 7) {
+            console.log("Not enough RHR data for baseline calculation.")
             return { status: "Error", message: "Not enough RHR data even after calculation. Requires at least 7 valid days." };
         }
 
@@ -260,6 +265,7 @@ export const calculateBaselines = {
         const dailyAvgRMSSD = this._groupAndAverageByDate(formattedRecords, "rmssd");
 
         if (dailyAvgRMSSD.length < 7) {
+            console.log("Not enough RMSSD data for baseline calculation.")
             return { status: "Error", message: "Not enough RMSSD data even after backfill. Requires at least 7 valid days." };
         }
 
@@ -279,7 +285,7 @@ export const calculateBaselines = {
      * Query range: D-28 to D-1.
      */
     async calculateSDNNBaseline(imei: string): Promise<BaselineResult> {
-        console.log("calculating sddn baseline for imei", imei)
+        console.log("calculating sdnn baseline for imei", imei)
         const startDate = getDateOffset(-28);
         const endDate = getDateOffset(-1);
 
@@ -295,6 +301,7 @@ export const calculateBaselines = {
         const dailyAvgSDNN = this._groupAndAverageByDate(formattedRecords, "sdnn");
 
         if (dailyAvgSDNN.length < 7) {
+            console.log("Not enough SDNN data for baseline calculation.")
             return { status: "Error", message: "Not enough SDNN data even after backfill. Requires at least 7 valid days." };
         }
 
