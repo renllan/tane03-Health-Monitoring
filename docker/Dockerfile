@@ -1,17 +1,24 @@
-# Use the official AWS Lambda Node.js 20 runtime image
-FROM public.ecr.aws/lambda/nodejs:20
+# Stage 1: Build stage
+FROM public.ecr.aws/lambda/nodejs:20 AS builder
+WORKDIR /usr/app
 
-# Copy package.json and package-lock.json first to leverage Docker cache
-COPY package*.json ${LAMBDA_TASK_ROOT}/
-
-# Install ALL dependencies (including devDependencies for tsc)
+# Install all dependencies including TypeScript
+COPY package*.json ./
 RUN npm install
 
-# Copy the rest of the application code
-COPY . ${LAMBDA_TASK_ROOT}/
+# Copy source and compile
+COPY . .
+RUN npx tsc
 
-# Pre-compile TypeScript to JS, then prune devDependencies
-RUN rm -rf dist && npx tsc && npm prune --omit=dev
+# Stage 2: Production stage
+FROM public.ecr.aws/lambda/nodejs:20
+WORKDIR ${LAMBDA_TASK_ROOT}
 
-# Point Lambda to the handler in lambda.js
-CMD ["lambda.handler"]
+# Copy only the compiled JS from the builder stage
+COPY --from=builder /usr/app/dist ./dist
+# Copy package files and install ONLY production dependencies
+COPY package*.json ./
+RUN npm install --omit=dev
+
+# Point to the compiled handler in the dist folder
+CMD ["dist/lambda.handler"]
