@@ -106,7 +106,7 @@ export const EvaluationService = {
             sendNotification(imei, "Cannot evaluate Sleep Duration today, not enough data to calculate baseline");
             return "Invalid";
         }
-        const level = evaluateDayLevel(current, baselineResult.durationBaseline, baselineResult.durationBaseline * 0.7, "other");
+        const level = evaluateDayLevel(current, baselineResult.durationBaseline, baselineResult.durationBaseline * 0.3, "other");
         if (level === "Poor") sendNotification(imei, "Your sleep duration was unusually short. Consider an early bedtime!");
         if (level === "Good") sendNotification(imei, "Your sleep duration was excellent. Keep it up!");
         return level;
@@ -130,7 +130,7 @@ export const EvaluationService = {
             await sendNotification(imei, "Cannot evaluate RHR today, not enough data to calculate baseline");
             return "Invalid";
         }
-        const level = evaluateDayLevel(current, baselineResult.baseline, baselineResult.baseline * 0.7, "rhr");
+        const level = evaluateDayLevel(current, baselineResult.baseline, baselineResult.baseline * 0.3, "rhr");
         if (level === "Poor") sendNotification(imei, "Your Resting Heart Rate is elevated. Your body might be under stress or recovering.");
         if (level === "Good") sendNotification(imei, "Your Resting Heart Rate is excellent");
         return level;
@@ -167,7 +167,7 @@ export const EvaluationService = {
             sendNotification(imei, "Cannot evaluate RMSSD today, not enough data to calculate baseline");
         } else {
             const currentRMSSD = rmssdValues.reduce((a, b) => a + b, 0) / rmssdValues.length;
-            RMSSDlevel = evaluateDayLevel(currentRMSSD, RMSSDbaselineResult.baseline, RMSSDbaselineResult.baseline * 0.7, "other");
+            RMSSDlevel = evaluateDayLevel(currentRMSSD, RMSSDbaselineResult.baseline, RMSSDbaselineResult.baseline * 0.3, "other");
             if (RMSSDlevel === "Poor") sendNotification(imei, "Your HRV (RMSSD) is low today, indicating high stress or poor recovery.");
             if (RMSSDlevel === "Good") sendNotification(imei, "Your HRV (RMSSD) is excellent today. Great recovery!");
         }
@@ -180,7 +180,7 @@ export const EvaluationService = {
             sendNotification(imei, "Cannot evaluate SDNN today, not enough data to calculate baseline");
         } else {
             const currentSDNN = sdnnValues.reduce((a, b) => a + b, 0) / sdnnValues.length;
-            SDNNlevel = evaluateDayLevel(currentSDNN, SDNNbaselineResult.baseline, SDNNbaselineResult.baseline * 0.7, "other");
+            SDNNlevel = evaluateDayLevel(currentSDNN, SDNNbaselineResult.baseline, SDNNbaselineResult.baseline * 0.3, "other");
             if (SDNNlevel === "Poor") sendNotification(imei, "Your HRV (SDNN) is low today, indicating high stress or poor recovery.");
             if (SDNNlevel === "Good") sendNotification(imei, "Your HRV (SDNN) is excellent today. Great recovery!");
         }
@@ -209,7 +209,7 @@ export const EvaluationService = {
             await sendNotification(imei, "Cannot evaluate Sleep Heart Rate today, not enough data to calculate baseline");
             return "Invalid";
         }
-        const level = evaluateDayLevel(sleepHeartRate, baselineResult.baseline, baselineResult.baseline * 0.7, "rhr");
+        const level = evaluateDayLevel(sleepHeartRate, baselineResult.baseline, baselineResult.baseline * 0.3, "rhr");
         if (level === "Poor") sendNotification(imei, "Your Average Sleep Heart Rate is elevated. Your body might be under stress or recovering.");
         if (level === "Good") sendNotification(imei, "Your Average Sleep Heart Rate is excellent");
         return level;
