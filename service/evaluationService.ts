@@ -201,7 +201,7 @@ export const EvaluationService = {
         if (!sleepHeartRateValues.length) {
             return "Invalid";
         }
-        const sleepHeartRate = sleepHeartRateValues.reduce((acc, item) => acc + item.avgHR, 0) / sleepHeartRateData.length;  //average of last 7 days
+        const sleepHeartRate = sleepHeartRateValues.reduce((acc, item) => acc + item, 0) / sleepHeartRateData.length;  //average of last 7 days
         if (!sleepHeartRate || sleepHeartRate <= 0) {
             return "Invalid";
         }
