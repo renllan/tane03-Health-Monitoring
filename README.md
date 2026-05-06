@@ -1,5 +1,7 @@
 # TanE03 Health Monitoring
 
+[繁體中文版 (Traditional Chinese)](README.zh-TW.md)
+
 A backend service built with Node.js, Express, and TypeScript that processes long-term health metrics (Heart Rate Variability, Resting Heart Rate, Sleep Scores, and Sleep Duration). This project is designed to run locally for development and is containerized via Docker for production deployment to AWS Lambda.
 
 ## Required Software
