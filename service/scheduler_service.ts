@@ -20,14 +20,9 @@ export class SchedulerService {
                 Arn: process.env.HEALTH_MONITORING_LAMBDA_ARN,
                 RoleArn: process.env.SCHEDULER_ROLE_ARN,
                 Input: JSON.stringify({
-                    httpMethod: "POST", // Assuming POST for evaluation. Change to GET if needed.
-                    path: `/evaluate/${imei}/day`,
-                    resource: "/evaluate/{imei}/day",
-                    pathParameters: {
-                        imei: imei
-                    },
-                    body: JSON.stringify({}),
-                    requestContext: {}
+                    source: "scheduler",
+                    action: "evaluateDay",
+                    imei: imei
                 }),
             },
             FlexibleTimeWindow: { Mode: "OFF" as const },
