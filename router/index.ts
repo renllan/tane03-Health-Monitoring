@@ -12,7 +12,7 @@ router.use('/', baselineRoutes);
 router.use('/', evaluationRoutes);
 router.use('/', schedulerRoutes);
 // Define routes
-router.post('/send-notification', async (req, res) => {
+router.post('/send-notification/:imei', async (req, res) => {
   try {
     return notificationController.send(req, res);
   } catch (error) {
@@ -23,7 +23,7 @@ router.post('/send-notification', async (req, res) => {
   }
 });
 
-router.post('/login-to-AAASWatch', async (req, res) => {
+router.post('/login-to-AAASWatch/:imei', async (req, res) => {
   try {
     return ASSWatchLoginController.login(req, res);
   } catch (error) {
