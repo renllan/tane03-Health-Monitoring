@@ -7,7 +7,8 @@ export const notificationController = {
    * Body: { imei: string, message: string }
    */
   async send(req: Request, res: Response) {
-    const { imei, message } = req.body;
+    const { imei } = req.params;
+    const { message } = req.body;
 
     if (!imei || !message) {
       return res.status(400).json({ error: "IMEI and message are required" });

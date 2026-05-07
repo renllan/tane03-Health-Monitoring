@@ -28,9 +28,12 @@ export const baselineController = {
                 case 'sdnn':
                     result = await calculateBaselines.getSDNNBaseline(imei);
                     break;
+                case 'sleepavghr':
+                    result = await calculateBaselines.getSleepAvgHRBaseline(imei);
+                    break;
                 default:
-                    return res.status(400).json({ 
-                        error: `Invalid baseline type: ${type}. Valid types are sleepDuration, sleepScore, rhr, rmssd, sdnn.` 
+                    return res.status(400).json({
+                        error: `Invalid baseline type: ${type}. Valid types are sleepDuration, sleepScore, rhr, rmssd, sdnn.`
                     });
             }
 
@@ -55,12 +58,13 @@ export const baselineController = {
             }
 
             // Execute all baseline calculations concurrently
-            const [sleepDuration, sleepScore, rhr, rmssd, sdnn] = await Promise.all([
+            const [sleepDuration, sleepScore, rhr, rmssd, sdnn, sleepAvgHR] = await Promise.all([
                 calculateBaselines.getSleepDurationBaseline(imei),
                 calculateBaselines.getSleepScoreBaseline(imei),
                 calculateBaselines.getRHRBaseline(imei),
                 calculateBaselines.getRMSSDBaseline(imei),
-                calculateBaselines.getSDNNBaseline(imei)
+                calculateBaselines.getSDNNBaseline(imei),
+                calculateBaselines.getSleepAvgHRBaseline(imei),
             ]);
 
             return res.status(200).json({
@@ -70,7 +74,8 @@ export const baselineController = {
                     sleepScore,
                     rhr,
                     rmssd,
-                    sdnn
+                    sdnn,
+                    sleepAvgHR
                 }
             });
 

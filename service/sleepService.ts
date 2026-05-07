@@ -13,10 +13,10 @@ export const SleepService = {
         const sleepData: SleepData[] | null = await SleepRepo.querySleepData(imei, startDate, endDate);
         const days: number = (new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24) + 1;
         if (sleepData.length === days) {
+            console.log(`[SleepService] Cache hit: ${sleepData.length} records. Data:`, sleepData.map(({ segments, ...rest }) => rest));
             return sleepData;
         }
 
-        const { group } = await DeviceGroupRepo.getDeviceGroup(imei);
         //TODO: figure out how to get the timezone
         const timezone = '';
         //get the timezone
@@ -43,8 +43,11 @@ export const SleepService = {
             await SleepRepo.saveSleep(day);
         }
         // 5. Merge cached + newly calculated, sort by date ascending
-        return [...sleepData as SleepData[], ...calculated]
+        const res = [...sleepData as SleepData[], ...calculated]
             .sort((a, b) => a.date.localeCompare(b.date));
+
+        console.log("Sleep data:", res.map(({ segments, ...rest }) => rest));
+        return res;
     },
 
 
@@ -64,8 +67,8 @@ export const SleepService = {
         //TODO
         const newSleepData = await this.calculateSleepData(imei, date, timezone);
         //save them
-        console.log(newSleepData);
         await SleepRepo.saveSleep(newSleepData);
+
         return newSleepData;
     },
     //calculate the sleep data for the given date and time zone
@@ -99,8 +102,12 @@ export const SleepService = {
             throw new Error(`Sleep Lambda returned no data for ${imei} on ${date}`);
         }
 
-        // Lambda omits imei from the result — inject it back before saving
-        return { ...results[0], imei } as SleepData;
+        // Lambda omits imei from the result — inject it back before saving.
+        // Also override the returned date with our requested anchor date.
+        // The Lambda assigns the date to the wake-up day (next morning), but we
+        // store records under the anchor date we actually requested to avoid
+        // a permanent cache-miss loop in getSleepData.
+        return { ...results[0], imei, date } as SleepData;
     },
 
     async querySleepAvgHeartRate(imei: string, startDate: string, endDate: string) {
