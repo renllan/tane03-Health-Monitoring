@@ -3,17 +3,14 @@ import { Request, Response } from 'express';
 
 export const ASSWatchLoginController = {
     async login(req: Request, res: Response) {
-        const { imei } = req.body;
+        const { imei } = req.params;
 
         if (!imei) {
             return res.status(400).json({ error: "IMEI is required" });
         }
 
         try {
-            // loginToAAASWatch returns a string (the token), not an object with .success
             const token = await loginToAAASWatch(imei);
-
-            // If no error was thrown, the login was successful.
             return res.status(200).json({
                 status: "Success",
                 token: token
