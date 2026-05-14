@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { EvaluationService } from '../service/evaluationService';
+import { loginToAAASWatch } from '../service/loginToAAASWatch';
 
 export const evaluationController = {
 
@@ -10,13 +11,29 @@ export const evaluationController = {
             const { imei } = req.params;
             if (!imei) return res.status(400).json({ error: "Missing required parameter: imei" });
 
+            const skipNotification = req.query.skipNotification === 'true';
+            const notificationPromises: Promise<any>[] = [];
+
+            if (!skipNotification) {
+                // Pre-warm the cache so concurrent evaluations don't trigger multiple logins
+                await loginToAAASWatch(imei).catch(err => console.error("Cache pre-warm failed:", err));
+            }
+
             const [sleepScore, sleepDuration, rhr, hrv, sleepHeartRate] = await Promise.all([
-                EvaluationService.evaluateDayLevelSleepScore(imei),
-                EvaluationService.evaluateDayLevelSleepDuration(imei),
-                EvaluationService.evaluateDayLevelRHR(imei),
-                EvaluationService.evaluateDayLevelHRV(imei),
-                EvaluationService.evaluateDayLevelSleepHeartRate(imei)
+                EvaluationService.evaluateDayLevelSleepScore(imei, skipNotification, notificationPromises),
+                EvaluationService.evaluateDayLevelSleepDuration(imei, skipNotification, notificationPromises),
+                EvaluationService.evaluateDayLevelRHR(imei, skipNotification, notificationPromises),
+                EvaluationService.evaluateDayLevelHRV(imei, skipNotification, notificationPromises),
+                EvaluationService.evaluateDayLevelSleepHeartRate(imei, skipNotification, notificationPromises)
             ]);
+
+            let notificationsSent: any[] = [];
+            if (notificationPromises.length > 0) {
+                const settled = await Promise.allSettled(notificationPromises);
+                notificationsSent = settled.map(res => 
+                    res.status === 'fulfilled' ? res.value : { success: false, error: res.reason?.message || res.reason }
+                );
+            }
 
             return res.status(200).json({
                 imei,
@@ -27,7 +44,8 @@ export const evaluationController = {
                     rhr,
                     ...hrv,
                     sleepHeartRate
-                }
+                },
+                notifications: notificationsSent
             });
         } catch (error: any) {
             console.error("Error in evaluateDay:", error);

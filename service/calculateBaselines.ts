@@ -242,71 +242,76 @@ export const calculateBaselines = {
     // ── RMSSD Baseline ────────────────────────────────────────────────────────
 
     /**
-     * Baseline = highest 7-day sliding window average of daily-averaged RMSSD.
-     * Step 1: Group raw HRV records by date → compute daily average RMSSD.
-     * Step 2: Apply sliding window over the daily averages.
+     * Baseline = highest 7-day sliding window average of daily RMSSD.
+     * Sources RMSSD values from sleep records (pre-calculated by the Sleep Lambda
+     * from sleep-time HR segments — more accurate than using all-day HR data).
      * Query range: D-28 to D-1.
      */
     async calculateRMSSDBaseline(imei: string): Promise<BaselineResult> {
-        console.log("calculating rmssdd baseline for imei", imei)
+        console.log("calculating rmssd baseline for imei", imei)
 
         const startDate = getDateOffset(-28);
         const endDate = getDateOffset(-1);
 
-        const startISO = `${startDate}T00:00:00.000Z`;
-        const endISO = `${endDate}T23:59:59.999Z`;
+        // Sleep records already contain rmssd calculated from sleep HR segments
+        const records = await SleepService.getSleepData(imei, startDate, endDate);
+        const valid = records
+            .filter((r: any) => r.rmssd != null && r.rmssd > 0)
+            .map((r: any) => r.rmssd);
 
-        // Use the service directly to fetch/calculate all HRV data for the time range
-        const records = await HRVService.calculateHRVForTimeRange(imei, startISO, endISO);
-
-        // Map the output to match what _groupAndAverageByDate expects (needs a 'date' field)
-        // Note: r.timestamp is a Unix timestamp string in seconds
-        const formattedRecords = records.map(r => ({ ...r, date: new Date(Number(r.timestamp) * 1000).toISOString() }));
-        const dailyAvgRMSSD = this._groupAndAverageByDate(formattedRecords, "rmssd");
-
-        if (dailyAvgRMSSD.length < 7) {
-            return { status: "Error", message: "Not enough RMSSD data even after backfill. Requires at least 7 valid days." };
+        if (valid.length < 7) {
+            return { status: "Error", message: "Not enough RMSSD data. Requires at least 7 valid sleep days." };
         }
 
         return {
             status: "Success",
             // Higher RMSSD = better autonomic recovery → pick maximum window
-            baseline: slidingWindowBaseline(dailyAvgRMSSD, "max"),
+            baseline: slidingWindowBaseline(valid, "max"),
         };
     },
 
     // ── SDNN Baseline ─────────────────────────────────────────────────────────
 
     /**
-     * Baseline = highest 7-day sliding window average of daily-averaged SDNN.
-     * Step 1: Group raw HRV records by date → compute daily average SDNN.
-     * Step 2: Apply sliding window over the daily averages.
+     * Baseline = highest 7-day sliding window average of daily SDNN.
+     * SDNN is computed here from the sleep segments' hrList stored in sleep records,
+     * using the same HR data that the Sleep Lambda used for sleep detection.
      * Query range: D-28 to D-1.
      */
     async calculateSDNNBaseline(imei: string): Promise<BaselineResult> {
-        console.log("calculating sddn baseline for imei", imei)
+        console.log("calculating sdnn baseline for imei", imei)
         const startDate = getDateOffset(-28);
         const endDate = getDateOffset(-1);
 
-        const startISO = `${startDate}T00:00:00.000Z`;
-        const endISO = `${endDate}T23:59:59.999Z`;
+        // Sleep records already contain segments with hrList from sleep-time data
+        const records = await SleepService.getSleepData(imei, startDate, endDate);
 
-        // Use the service directly to fetch/calculate all HRV data for the time range
-        const records = await HRVService.calculateHRVForTimeRange(imei, startISO, endISO);
+        const dailySDNN: number[] = records
+            .filter((r: any) => r.segments && r.segments.length > 0)
+            .map((r: any) => {
+                // Flatten all HR values from all segments for this night
+                const allHR: number[] = r.segments.flatMap((seg: any) =>
+                    (seg.hrList ?? []).map((h: any) => h.value)
+                ).filter((v: number) => v > 0);
 
-        // Map the output to match what _groupAndAverageByDate expects (needs a 'date' field)
-        // Note: r.timestamp is a Unix timestamp string in seconds
-        const formattedRecords = records.map(r => ({ ...r, date: new Date(Number(r.timestamp) * 1000).toISOString() }));
-        const dailyAvgSDNN = this._groupAndAverageByDate(formattedRecords, "sdnn");
+                if (allHR.length < 2) return null;
 
-        if (dailyAvgSDNN.length < 7) {
-            return { status: "Error", message: "Not enough SDNN data even after backfill. Requires at least 7 valid days." };
+                // Convert to RR intervals (ms) and compute SDNN
+                const rr = allHR.map(v => 60000 / v);
+                const mean = rr.reduce((a, b) => a + b, 0) / rr.length;
+                const variance = rr.reduce((s, v) => s + (v - mean) ** 2, 0) / (rr.length - 1);
+                return Math.sqrt(variance);
+            })
+            .filter((v: number | null): v is number => v !== null && v > 0);
+
+        if (dailySDNN.length < 7) {
+            return { status: "Error", message: "Not enough SDNN data. Requires at least 7 valid sleep days." };
         }
 
         return {
             status: "Success",
             // Higher SDNN = better heart rate variability → pick maximum window
-            baseline: slidingWindowBaseline(dailyAvgSDNN, "max"),
+            baseline: slidingWindowBaseline(dailySDNN, "max"),
         };
     },
 

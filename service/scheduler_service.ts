@@ -40,4 +40,8 @@ export class SchedulerService {
             }
         }
     }
+    async deleteEvaluationSchedule(imei: string): Promise<void> {
+        const scheduleName = `HealthCheck-User-${imei}`;
+        await this.schedulerRepo.deleteSchedule(scheduleName);
+    }
 }
