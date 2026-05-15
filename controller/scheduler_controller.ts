@@ -36,4 +36,24 @@ export class SchedulerController {
             res.status(500).json({ error: "Internal server error" });
         }
     };
+
+    deleteSchedule = async (req: Request, res: Response): Promise<void> => {
+        try {
+            const { imei } = req.params;
+
+            if (!imei) {
+                res.status(400).json({ error: "Missing required fields" });
+                return;
+            }
+
+            await this.schedulerService.deleteEvaluationSchedule(imei);
+
+            res.status(200).json({ message: "Schedule deleted successfully" });
+            console.log("Schedule deleted successfully");
+        } catch (error) {
+            console.log(error);
+            console.error("Error deleting schedule:", error);
+            res.status(500).json({ error: "Internal server error" });
+        }
+    };
 }

@@ -6,7 +6,7 @@ export async function sendNotification(imei: string, message: string): Promise<{
    try {
       const token = await loginToAAASWatch(imei);
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 1000); // 3s timeout
+      const timeout = setTimeout(() => controller.abort(), 5000); // 5s timeout
 
       const response = await fetch(`${process.env.AAASWatch_BASE_URL}/downlinkMessage/${imei}/send`, {
          method: 'POST',

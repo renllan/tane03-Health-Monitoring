@@ -65,7 +65,7 @@ export const EvaluationService = {
     // Fetches today's actual value + baseline via service, then evaluates.
 
     /** Sleep Score: ±5 points threshold */
-    async evaluateDayLevelSleepScore(imei: string): Promise<Level> {
+    async evaluateDayLevelSleepScore(imei: string, skipNotification = false, promises: Promise<any>[] = []): Promise<Level> {
         console.log("evaluate Day Level SleepScore")
         const today = getDateOffset(0);
         const previousSevenDays = getDateOffset(-7);
@@ -82,12 +82,12 @@ export const EvaluationService = {
             return "Invalid";
         }
         const level = evaluateDayLevel(sleepScore, baselineResult.baseline, 10, "other");
-        if (level === "Poor") sendNotification(imei, "Your Sleep Score dropped significantly today. Try to rest!");
+        if (!skipNotification) promises.push(sendNotification(imei, "TESTING: Your Sleep Score dropped significantly today. Try to rest!"));
         return level;
     },
 
     /** Sleep Duration: ±30% of baseline threshold */
-    async evaluateDayLevelSleepDuration(imei: string): Promise<Level> {
+    async evaluateDayLevelSleepDuration(imei: string, skipNotification = false, promises: Promise<any>[] = []): Promise<Level> {
         console.log("evaluate Day Level sleep Duration")
 
         const today = getDateOffset(0);
@@ -107,12 +107,12 @@ export const EvaluationService = {
             return "Invalid";
         }
         const level = evaluateDayLevel(sleepDuration, baselineResult.durationBaseline, baselineResult.durationBaseline * 0.3, "other");
-        if (level === "Poor") sendNotification(imei, "Your sleep duration was unusually short. Consider an early bedtime!");
+        if (!skipNotification) promises.push(sendNotification(imei, "TESTING: Your sleep duration was unusually short. Consider an early bedtime!"));
         return level;
     },
 
     /** RHR: ±10% of baseline threshold (higher than baseline = Poor) */
-    async evaluateDayLevelRHR(imei: string): Promise<Level> {
+    async evaluateDayLevelRHR(imei: string, skipNotification = false, promises: Promise<any>[] = []): Promise<Level> {
         console.log("evaluate Day Level RHR")
         const today = getDateOffset(0);
         const previousSevenDays = getDateOffset(-7);
@@ -131,12 +131,12 @@ export const EvaluationService = {
             return "Invalid";
         }
         const level = evaluateDayLevel(current, baselineResult.baseline, baselineResult.baseline * 0.3, "rhr");
-        if (level === "Poor") sendNotification(imei, "Your Resting Heart Rate is elevated. Your body might be under stress or recovering.");
+        if (!skipNotification) promises.push(sendNotification(imei, "TESTING: Your Resting Heart Rate is elevated. Your body might be under stress or recovering."));
         return level;
     },
 
     /** HRV (RMSSD + SDNN): ±5% of baseline threshold */
-    async evaluateDayLevelHRV(imei: string): Promise<{ RMSSDlevel: Level; SDNNlevel: Level }> {
+    async evaluateDayLevelHRV(imei: string, skipNotification = false, promises: Promise<any>[] = []): Promise<{ RMSSDlevel: Level; SDNNlevel: Level }> {
         console.log("evaluate Day Level HRV")
         const today = getDateOffset(0);
         const previousSevenDays = getDateOffset(-7);
@@ -169,7 +169,7 @@ export const EvaluationService = {
         } else {
             const currentRMSSD = rmssdValues.reduce((a, b) => a + b, 0) / rmssdValues.length;
             RMSSDlevel = evaluateDayLevel(currentRMSSD, RMSSDbaselineResult.baseline, RMSSDbaselineResult.baseline * 0.3, "other");
-            if (RMSSDlevel === "Poor") sendNotification(imei, "Your HRV (RMSSD) is low today, indicating high stress or poor recovery.");
+            if (!skipNotification) promises.push(sendNotification(imei, "TESTING: Your HRV (RMSSD) is low today, indicating high stress or poor recovery."));
         }
 
         // ── SDNN ───────────────────────────────────────────────────────────────
@@ -181,12 +181,12 @@ export const EvaluationService = {
         } else {
             const currentSDNN = sdnnValues.reduce((a, b) => a + b, 0) / sdnnValues.length;
             SDNNlevel = evaluateDayLevel(currentSDNN, SDNNbaselineResult.baseline, SDNNbaselineResult.baseline * 0.3, "other");
-            if (SDNNlevel === "Poor") sendNotification(imei, "Your HRV (SDNN) is low today, indicating high stress or poor recovery.");
+            if (!skipNotification) promises.push(sendNotification(imei, "TESTING: Your HRV (SDNN) is low today, indicating high stress or poor recovery."));
         }
         return { RMSSDlevel, SDNNlevel };
     },
 
-    async evaluateDayLevelSleepHeartRate(imei: string): Promise<Level> {
+    async evaluateDayLevelSleepHeartRate(imei: string, skipNotification = false, promises: Promise<any>[] = []): Promise<Level> {
         //get the sleep heartrate baseline
         //get the sleep heartrate data
         //compare and evaluate
@@ -210,7 +210,7 @@ export const EvaluationService = {
             return "Invalid";
         }
         const level = evaluateDayLevel(sleepHeartRate, baselineResult.baseline, baselineResult.baseline * 0.3, "rhr");
-        if (level === "Poor") sendNotification(imei, "Your Average Sleep Heart Rate is elevated. Your body might be under stress or recovering.");
+        if (!skipNotification) promises.push(sendNotification(imei, "TESTING: Your Average Sleep Heart Rate is elevated. Your body might be under stress or recovering."));
         return level;
     },
     // ── Week-Level Evaluators ─────────────────────────────────────────────────

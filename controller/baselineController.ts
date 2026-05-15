@@ -64,7 +64,7 @@ export const baselineController = {
                 calculateBaselines.getRHRBaseline(imei),
                 calculateBaselines.getRMSSDBaseline(imei),
                 calculateBaselines.getSDNNBaseline(imei),
-                calculateBaselines.getSleepAvgHRBaseline(imei),
+                calculateBaselines.getSleepAvgHRBaseline(imei)
             ]);
 
             return res.status(200).json({
