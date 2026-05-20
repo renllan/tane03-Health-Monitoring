@@ -1,81 +1,44 @@
-const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
-const { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand } = require("@aws-sdk/lib-dynamodb");
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { DynamoDBDocumentClient, GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { HRVData } from "../types/HRVType";
+
 // Setup the DynamoDB Client
 const client = new DynamoDBClient({ region: process.env.AP_NORTHEAST_REGION });
 const docClient = DynamoDBDocumentClient.from(client);
-import { HRVData } from "../types/HRVType";
 
-const TABLE_NAME = process.env.TANE03_HRV_TABLE;
+const getTableName = () => process.env.TANE03_HRV_TABLE || 'TanE03_HRV_Table';
 
 export const HRV_repo = {
-    async getLastHourData(imei: string, timestamp: string, type: string) {
-        //round to the nearest hour
-        const roundedTimestamp = Math.floor(Number(timestamp) / 3600) * 3600;
+    /**
+     * Retrieves cached HRVData from the database by imei, date, and HRVType.
+     */
+    async getHRV(imei: string, date: string, type: string): Promise<HRVData | null> {
         const command = new GetCommand({
-            TableName: TABLE_NAME,
+            TableName: getTableName(),
             Key: {
                 "imei": imei,
-                "type#timestamp": `${type}#${roundedTimestamp}`
+                "type#timestamp": `${type}#${date}`
             },
         });
         const response = await docClient.send(command);
-        return response.Item;
-        //return response.Item;
+        if (!response.Item) return null;
+        return response.Item as HRVData;
     },
 
-    async saveHRV(data: HRVData) {
+    /**
+     * Saves calculated HRVData into the DynamoDB cache.
+     */
+    async saveHRV(data: HRVData): Promise<any> {
         const command = new PutCommand({
-            TableName: TABLE_NAME,
+            TableName: getTableName(),
             Item: {
                 "imei": data.imei,
-                "type#timestamp": `${data.type}#${data.timestamp}`, // <--- The composite key!
-                "value": data.value,
+                "type#timestamp": `${data.type}#${data.timestamp}`,
+                "values": data.values,
                 "type": data.type,
-                "timestamp": data.timestamp, // Keep the unrounded timestamp as bonus metadata
+                "timestamp": data.timestamp
             }
         });
-        return true
-        //return docClient.send(command);
-    },
-
-    async queryHRV(imei: string, startDate: string, endDate: string) {
-        // Convert YYYY-MM-DD to UNIX timestamp in seconds
-        const startTs = Math.floor(new Date(`${startDate}T00:00:00Z`).getTime() / 1000);
-        const endTs = Math.floor(new Date(`${endDate}T23:59:59Z`).getTime() / 1000);
-
-        const queryForType = async (type: string) => {
-            const command = new QueryCommand({
-                TableName: TABLE_NAME,
-                KeyConditionExpression: "imei = :imei AND #sk BETWEEN :startSk AND :endSk",
-                ExpressionAttributeNames: {
-                    "#sk": "type#timestamp"
-                },
-                ExpressionAttributeValues: {
-                    ":imei": imei,
-                    ":startSk": `${type}#${startTs}`,
-                    ":endSk": `${type}#${endTs}`
-                }
-            });
-            const response = await docClient.send(command);
-            return response.Items || [];
-        };
-
-        const [rmssdItems, sdnnItems] = await Promise.all([
-            queryForType("RMSSD"),
-            queryForType("SDNN")
-        ]);
-
-        const allItems = [...rmssdItems, ...sdnnItems];
-
-        // Map to what calculateBaselines expects: { date, rmssd?, sdnn? }
-        return allItems.map(item => {
-            // Convert timestamp (seconds) back to YYYY-MM-DD for grouping
-            const dateStr = new Date(Number(item.timestamp) * 1000).toISOString().split("T")[0];
-            return {
-                date: dateStr,
-                rmssd: item.type === "RMSSD" ? item.value : undefined,
-                sdnn: item.type === "SDNN" ? item.value : undefined
-            };
-        });
+        return docClient.send(command);
     }
-}
+};

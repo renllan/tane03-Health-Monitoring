@@ -4,6 +4,17 @@ import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda"
 import { DeviceGroupRepo } from "../repository/DeviceGroup_repo"
 
 const lambdaClient = new LambdaClient({ region: process.env.US_REGION });
+async function getAnchorHour(imei: string): Promise<string> {
+    try {
+        const info = await DeviceGroupRepo.getDeviceGroup(imei);
+        const group = info?.group;
+        if (group === 'Indonesia') return '11:00:00Z'; // UTC+7 (18:00 local is 11:00 UTC)
+        return '10:00:00Z'; // UTC+8 for Taiwan, Malaysia (18:00 local is 10:00 UTC)
+    } catch {
+        return '10:00:00Z'; // Default to Taiwan (UTC+8)
+    }
+}
+
 export const SleepService = {
     //get the sleep data from the repo if the date range has all the data
     //if not, calculate the missing data and save them to the repo
@@ -13,16 +24,10 @@ export const SleepService = {
         const sleepData: SleepData[] | null = await SleepRepo.querySleepData(imei, startDate, endDate);
         const days: number = (new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24) + 1;
         if (sleepData.length === days) {
-            console.log(`[SleepService] Cache hit: ${sleepData.length} records. Data:`, sleepData.map(({ segments, ...rest }) => rest));
             return sleepData;
         }
 
-        //TODO: figure out how to get the timezone
-        const timezone = '';
-        //get the timezone
-        //find the date that is not included
-        //calculate the sleep data for that date
-        //save them        
+        const anchorHour = await getAnchorHour(imei);
         const cachedDates = new Set(sleepData.map((d: any) => d.date));
         const missingDates: string[] = [];
         for (let i = 0; i < days; i++) {
@@ -36,7 +41,7 @@ export const SleepService = {
 
         // 4. Calculate and save each missing date
         const calculated = await Promise.all(
-            missingDates.map(date => this.calculateSleepData(imei, date, timezone))
+            missingDates.map(date => this.calculateSleepData(imei, date, anchorHour))
         );
 
         for (const day of calculated) {
@@ -45,8 +50,6 @@ export const SleepService = {
         // 5. Merge cached + newly calculated, sort by date ascending
         const res = [...sleepData as SleepData[], ...calculated]
             .sort((a, b) => a.date.localeCompare(b.date));
-
-        console.log("Sleep data:", res.map(({ segments, ...rest }) => rest));
         return res;
     },
 
@@ -61,11 +64,8 @@ export const SleepService = {
             return sleepData;
         }
 
-        const { group } = await DeviceGroupRepo.getDeviceGroup(imei);
-        const timezone = '';
-        //get the timezone of current imei
-        //TODO
-        const newSleepData = await this.calculateSleepData(imei, date, timezone);
+        const anchorHour = await getAnchorHour(imei);
+        const newSleepData = await this.calculateSleepData(imei, date, anchorHour);
         //save them
         await SleepRepo.saveSleep(newSleepData);
 
@@ -74,16 +74,16 @@ export const SleepService = {
     //calculate the sleep data for the given date and time zone
     //invoke the sleep lambda to calculate the sleep data
     //return the sleep data
-    async calculateSleepData(imei: string, date: string, timezone: string): Promise<SleepData> {
+    async calculateSleepData(imei: string, date: string, anchorHour: string): Promise<SleepData> {
         const command = new InvokeCommand({
             FunctionName: process.env.SLEEP_LAMBDA_NAME,
             InvocationType: "RequestResponse",
             // detectSleepSegments reads from event.arguments.
-            // anchorDate is the target date at 18:00; days=1 returns only that day.
+            // anchorDate is the target date at 18:00 local time; days=1 returns only that day.
             Payload: JSON.stringify({
                 arguments: {
                     deviceId: imei,
-                    anchorDate: `${date}T18:00:00Z`,
+                    anchorDate: `${date}T${anchorHour}`,
                     days: 1,
                 }
             }),
@@ -107,7 +107,17 @@ export const SleepService = {
         // The Lambda assigns the date to the wake-up day (next morning), but we
         // store records under the anchor date we actually requested to avoid
         // a permanent cache-miss loop in getSleepData.
-        return { ...results[0], imei, date } as SleepData;
+
+        // Normalize segments: the Lambda may return it as a JSON string.
+        // Parse it here so saveSleep always receives a plain array, preventing
+        // double-stringification (JSON.stringify of an already-stringified string).
+        const raw1 = results[0];
+        let segments = raw1.segments;
+        if (typeof segments === "string") {
+            try { segments = JSON.parse(segments); } catch { segments = []; }
+        }
+
+        return { ...raw1, segments, imei, date } as SleepData;
     },
 
     async querySleepAvgHeartRate(imei: string, startDate: string, endDate: string) {

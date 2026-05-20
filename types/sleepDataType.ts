@@ -12,13 +12,13 @@ export interface SleepSegment {
 export interface SleepData {
     imei: string;
     date: string;
-    minutes: number;
-    sleepScore: number;
+    minutes: number | null;
+    sleepScore: number | null;
     segments: SleepSegment[] | any[];
-    avgHR: number;
-    minHR: number;
-    rmssd: number;
-    rhr: number;
-    rhrTime: string;
-    wakeUps: number;
+    avgHR: number | null;
+    minHR: number | null;
+    rmssd: number | null;
+    rhr: number | null;
+    rhrTime: string | null;
+    wakeUps: number | null;
 }

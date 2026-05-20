@@ -73,7 +73,7 @@ export const EvaluationService = {
         if (!sleepData.length) {
             return "Invalid";
         }
-        const sleepScore = sleepData.reduce((acc, item) => acc + item.sleepScore, 0) / sleepData.length;  //average of last 7 days
+        const sleepScore = sleepData.reduce((acc, item) => acc + (item.sleepScore ?? 0), 0) / sleepData.length;  //average of last 7 days
         if (!sleepScore || sleepScore <= 0) {
             return "Invalid";
         }
@@ -97,7 +97,7 @@ export const EvaluationService = {
         if (!sleepData.length) {
             return "Invalid";
         }
-        const sleepDuration = sleepData.reduce((acc, item) => acc + item.minutes, 0) / sleepData.length; //average of last 7 days
+        const sleepDuration = sleepData.reduce((acc, item) => acc + (item.minutes ?? 0), 0) / sleepData.length; //average of last 7 days
         if (!sleepDuration || sleepDuration <= 0) {
             return "Invalid";
         }
@@ -121,7 +121,7 @@ export const EvaluationService = {
         if (!sleepData.length) {
             return "Invalid";
         }
-        const rhr = sleepData.reduce((acc, item) => acc + item.rhr, 0) / sleepData.length;  //average of last 7 days
+        const rhr = sleepData.reduce((acc, item) => acc + (item.rhr ?? 0), 0) / sleepData.length;  //average of last 7 days
         const current = rhr;
         if (!current || current <= 0) {
             return "Invalid";
@@ -139,18 +139,13 @@ export const EvaluationService = {
     async evaluateDayLevelHRV(imei: string, skipNotification = false, promises: Promise<any>[] = []): Promise<{ RMSSDlevel: Level; SDNNlevel: Level }> {
         console.log("evaluate Day Level HRV")
         const today = getDateOffset(0);
-        const previousSevenDays = getDateOffset(-7);
-
-        const startISO = `${previousSevenDays}T00:00:00.000Z`;
-        const endISO = `${today}T23:59:59.999Z`;
-
-        const hrvRecords = await HRVService.calculateHRVForTimeRange(imei, startISO, endISO);
-
+        const hrvRecords = await HRVService.calculateHRV(imei, today);
+        console.log("today's hrv: ", hrvRecords);
         // Separate valid RMSSD and SDNN values
-        const rmssdValues = hrvRecords.map(r => r.rmssd).filter(v => v > 0);
-        const sdnnValues = hrvRecords.map(r => r.sdnn).filter(v => v > 0);
+        const rmssdValues = hrvRecords?.rmssd?.values?.map(v => v.value);
+        const sdnnValues = hrvRecords?.sdnn?.values?.map(v => v.value);
 
-        if (!rmssdValues.length && !sdnnValues.length) {
+        if (!rmssdValues?.length && !sdnnValues?.length) {
             return { RMSSDlevel: "Invalid", SDNNlevel: "Invalid" };
         }
 
@@ -162,7 +157,7 @@ export const EvaluationService = {
 
         // ── RMSSD ──────────────────────────────────────────────────────────────
         let RMSSDlevel: Level = "Invalid";
-        if (!rmssdValues.length) {
+        if (!rmssdValues?.length) {
             RMSSDlevel = "Invalid"
         } else if (RMSSDbaselineResult.status !== "Success" || !RMSSDbaselineResult.baseline) {
             RMSSDlevel = "Invalid"
@@ -174,7 +169,7 @@ export const EvaluationService = {
 
         // ── SDNN ───────────────────────────────────────────────────────────────
         let SDNNlevel: Level = "Invalid";
-        if (!sdnnValues.length) {
+        if (!sdnnValues?.length) {
             SDNNlevel = "Invalid";
         } else if (SDNNbaselineResult.status !== "Success" || !SDNNbaselineResult.baseline) {
             SDNNlevel = "Invalid";

@@ -4,6 +4,7 @@ import { HRVService } from "./calculateHRV";
 import { sendNotification } from "./sendNotification";
 import { BaselineData, BaselineType } from "../types/baselineType";
 import { SleepRepo } from "../repository/sleep_repo";
+import { HRVData } from "../types/HRVType";
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export type Level = "Good" | "Fair" | "Poor" | "Invalid";
@@ -250,23 +251,33 @@ export const calculateBaselines = {
     async calculateRMSSDBaseline(imei: string): Promise<BaselineResult> {
         console.log("calculating rmssd baseline for imei", imei)
 
-        const startDate = getDateOffset(-28);
-        const endDate = getDateOffset(-1);
-
-        // Sleep records already contain rmssd calculated from sleep HR segments
-        const records = await SleepService.getSleepData(imei, startDate, endDate);
-        const valid = records
-            .filter((r: any) => r.rmssd != null && r.rmssd > 0)
-            .map((r: any) => r.rmssd);
-
-        if (valid.length < 7) {
-            return { status: "Error", message: "Not enough RMSSD data. Requires at least 7 valid sleep days." };
+        const dates: string[] = [];
+        for (let i = -60; i <= -1; i++) {
+            dates.push(getDateOffset(i));
         }
 
+        const results: (HRVData | null)[] = await Promise.all(
+            dates.map(date => HRVService.calculateRMSSD(imei, date).catch(() => null))
+        );
+
+        // Sort results chronologically by timestamp (date) before extracting daily values
+        const dailyValues = results
+            .filter((res): res is HRVData => res !== null && res !== undefined)
+            .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+            .map(res => {
+                const vals = res.values.map(v => v.value).filter(v => v > 0);
+                return vals.length > 0 ? Math.max(...vals) : null;
+            })
+            .filter((v): v is number => v !== null && v > 0);
+
+        if (dailyValues.length < 7) {
+            return { status: "Error", message: "Not enough RMSSD data. Requires at least 7 valid sleep days." };
+        }
+        console.log(dailyValues);
         return {
             status: "Success",
             // Higher RMSSD = better autonomic recovery → pick maximum window
-            baseline: slidingWindowBaseline(valid, "max"),
+            baseline: slidingWindowBaseline(dailyValues, "max"),
         };
     },
 
@@ -280,38 +291,34 @@ export const calculateBaselines = {
      */
     async calculateSDNNBaseline(imei: string): Promise<BaselineResult> {
         console.log("calculating sdnn baseline for imei", imei)
-        const startDate = getDateOffset(-28);
-        const endDate = getDateOffset(-1);
 
-        // Sleep records already contain segments with hrList from sleep-time data
-        const records = await SleepService.getSleepData(imei, startDate, endDate);
+        const dates: string[] = [];
+        for (let i = -60; i <= -1; i++) {
+            dates.push(getDateOffset(i));
+        }
 
-        const dailySDNN: number[] = records
-            .filter((r: any) => r.segments && r.segments.length > 0)
-            .map((r: any) => {
-                // Flatten all HR values from all segments for this night
-                const allHR: number[] = r.segments.flatMap((seg: any) =>
-                    (seg.hrList ?? []).map((h: any) => h.value)
-                ).filter((v: number) => v > 0);
+        const results: (HRVData | null)[] = await Promise.all(
+            dates.map(date => HRVService.calculateSDNN(imei, date).catch(() => null))
+        );
 
-                if (allHR.length < 2) return null;
-
-                // Convert to RR intervals (ms) and compute SDNN
-                const rr = allHR.map(v => 60000 / v);
-                const mean = rr.reduce((a, b) => a + b, 0) / rr.length;
-                const variance = rr.reduce((s, v) => s + (v - mean) ** 2, 0) / (rr.length - 1);
-                return Math.sqrt(variance);
+        // Sort results chronologically by timestamp (date) before extracting daily values
+        const dailyValues = results
+            .filter((res): res is HRVData => res !== null && res !== undefined)
+            .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+            .map(res => {
+                const vals = res.values.map(v => v.value).filter(v => v > 0);
+                return vals.length > 0 ? Math.max(...vals) : null;
             })
-            .filter((v: number | null): v is number => v !== null && v > 0);
+            .filter((v): v is number => v !== null && v > 0);
 
-        if (dailySDNN.length < 7) {
+        if (dailyValues.length < 7) {
             return { status: "Error", message: "Not enough SDNN data. Requires at least 7 valid sleep days." };
         }
 
         return {
             status: "Success",
             // Higher SDNN = better heart rate variability → pick maximum window
-            baseline: slidingWindowBaseline(dailySDNN, "max"),
+            baseline: slidingWindowBaseline(dailyValues, "max"),
         };
     },
 

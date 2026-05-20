@@ -1,149 +1,180 @@
-import { HeartRateRepo } from "../repository/HeartRate_repo";
+import { SleepService } from "./sleepService.js";
 import { HRV_repo } from "../repository/HRV_repo";
-import { HRVData, HRVType } from "../types/HRVType";
+import { HRVData, HRVType, HRVResult } from "../types/HRVType";
+import { SleepData, SleepSegment, HeartRateData } from "../types/sleepDataType";
 import { AppError } from "../utils/AppError";
 
 // ─── Mathematical Core ────────────────────────────────────────────────────────
 
-function convertToRRIntervals(rawData: any[] | null): number[] {
-    const data = rawData ? rawData.filter((item: any) => item.value > 0) : [];
-    if (data.length < 5) return [];
-    return data.map((item: any) => 60000 / item.value);
+/**
+ * Converts a list of HR samples (bpm) into RR intervals (ms).
+ * Filters out zero/invalid readings and requires at least 5 points.
+ */
+function hrListToRRIntervals(hrList: { timestamp: string; value: number }[]): number[] {
+    // 1. Deduplicate by timestamp (keeps first occurrence)
+    const seen = new Set<string>();
+    const deduped = hrList.filter(h => {
+        if (seen.has(h.timestamp)) return false;
+        seen.add(h.timestamp);
+        return true;
+    });
+
+    // 2. Sort chronologically (required for correct successive differences in RMSSD)
+    deduped.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+    // 3. Filter out invalid HR values and require at least 5 points
+    const valid = deduped.filter(h => h.value > 0);
+    if (valid.length < 5) return [];
+
+    return valid.map(h => 60000 / h.value);
 }
 
-function computeRMSSD(rrIntervals: number[]): number {
-    if (rrIntervals.length < 2) return -1;
-
-    let sumSquaredDiffs = 0;
-    let validPairs = 0;
-
-    for (let i = 1; i < rrIntervals.length; i++) {
-        const diff = rrIntervals[i] - rrIntervals[i - 1];
-        sumSquaredDiffs += (diff * diff);
-        validPairs++;
-    }
-
-    if (validPairs === 0) return -1;
-    return Math.sqrt(sumSquaredDiffs / validPairs);
-}
 
 function computeSDNN(rrIntervals: number[]): number {
     if (rrIntervals.length < 2) return -1;
 
-    const sumRR = rrIntervals.reduce((a: number, b: number) => a + b, 0);
-    const meanRR = sumRR / rrIntervals.length;
-
-    let sumSquaredDiffs = 0;
-    for (let i = 0; i < rrIntervals.length; i++) {
-        const diff = rrIntervals[i] - meanRR;
-        sumSquaredDiffs += (diff * diff);
-    }
-
-    const variance = sumSquaredDiffs / (rrIntervals.length - 1);
+    const mean = rrIntervals.reduce((a, b) => a + b, 0) / rrIntervals.length;
+    const variance =
+        rrIntervals.reduce((sum, rr) => sum + (rr - mean) ** 2, 0) /
+        (rrIntervals.length - 1);
     return Math.sqrt(variance);
 }
 
+// RMSSD = sqrt( mean of squared successive differences )
+// i.e. sqrt( sum((RR[i] - RR[i-1])^2) / (n-1) )
+function computeRMSSD(rrIntervals: number[]): number {
+    if (rrIntervals.length < 2) return -1;
+    let sumSqDiff = 0;
+    for (let i = 1; i < rrIntervals.length; i++) {
+        const diff = rrIntervals[i] - rrIntervals[i - 1];
+        sumSqDiff += diff * diff;
+    }
+    return Math.sqrt(sumSqDiff / (rrIntervals.length - 1));
+}
 // ─── Service Methods ──────────────────────────────────────────────────────────
 
-async function calculateHRV(imei: string, timestamp: string) {
-    // 1. Check cache first for BOTH
-    const cachedRmssd = await HRV_repo.getLastHourData(imei, timestamp, HRVType.RMSSD);
-    const cachedSdnn = await HRV_repo.getLastHourData(imei, timestamp, HRVType.SDNN);
-
-    let rmssd: number | null = cachedRmssd?.rmssd !== undefined ? cachedRmssd.rmssd : null;
-    let sdnn: number | null = cachedSdnn?.sdnn !== undefined ? cachedSdnn.sdnn : null;
-
-    // 2. Fetch raw data ONCE if either is missing
-    if (rmssd === null || sdnn === null) {
-        const rawData = await HeartRateRepo.getLastHourData(imei, timestamp);
-        const rrIntervals = convertToRRIntervals(rawData);
-
-        if (rrIntervals.length === 0) {
-            // Save -1 to prevent re-querying this empty hour
-            if (rmssd === null) await HRV_repo.saveHRV({ imei, timestamp, type: HRVType.RMSSD, value: -1 });
-            if (sdnn === null) await HRV_repo.saveHRV({ imei, timestamp, type: HRVType.SDNN, value: -1 });
-            throw new AppError(`No valid heart rate data found for device ${imei} at timestamp ${timestamp}`, 404);
-        }
-
-        // Calculate missing RMSSD
-        if (rmssd === null) {
-            let calcRmssd = computeRMSSD(rrIntervals);
-            if (calcRmssd > 900) calcRmssd = -1; // Noise threshold
-            await HRV_repo.saveHRV({ imei, timestamp, type: HRVType.RMSSD, value: calcRmssd });
-            rmssd = calcRmssd;
-        }
-
-        // Calculate missing SDNN
-        if (sdnn === null) {
-            let calcSdnn = computeSDNN(rrIntervals);
-            if (calcSdnn > 600) calcSdnn = -1; // Noise threshold
-            await HRV_repo.saveHRV({ imei, timestamp, type: HRVType.SDNN, value: calcSdnn });
-            sdnn = calcSdnn;
-        }
-    }
-
-    // 3. Final validation (we don't want to break the pipeline, so we just return the values, 
-    // even if they are -1, and let the caller decide how to handle noise)
-    if (rmssd === -1 && sdnn === -1) {
-        throw new AppError(`HRV values exceeded noise threshold or had insufficient points for device ${imei} at timestamp ${timestamp}`, 422);
-    }
-
+/**
+ * Calculate HRV for one night's sleep.
+ *
+ * - RMSSD: taken directly from the sleep lambda result (sleepData.rmssd).
+ * - SDNN:  computed locally from the HR samples in sleepData.segments.
+ *
+ * @param imei    Device identifier
+ * @param date    "YYYY-MM-DD" — the anchor date of the sleep record
+ */
+async function calculateHRV(imei: string, date: string) {
+    // 1. Check the HRV cache first (keyed by date string, not Unix timestamp)
+    const rmssd = await calculateRMSSD(imei, date);
+    const sdnn = await calculateSDNN(imei, date);
     return { rmssd, sdnn };
 }
 
-// Provide individual methods for backward compatibility, but wrap them around the unified calculation
-async function calculateRMSSD(imei: string, timestamp: string) {
-    const { rmssd } = await calculateHRV(imei, timestamp);
-    if (rmssd === -1) throw new AppError(`RMSSD value exceeded valid threshold of 900ms. Discarding as noise.`, 422);
-    return rmssd;
-}
+// Backward-compatible individual accessors
+async function calculateRMSSD(imei: string, date: string) {
+    // const existing = await HRV_repo.getHRV(imei, date, HRVType.RMSSD);
+    // if (existing) return existing;
 
-async function calculateSDNN(imei: string, timestamp: string) {
-    const { sdnn } = await calculateHRV(imei, timestamp);
-    if (sdnn === -1) throw new AppError(`SDNN value exceeded valid threshold of 600ms. Discarding as noise.`, 422);
-    return sdnn;
-}
+    const sleep: SleepData[] = await SleepService.getSleepData(imei, date, date);
 
-async function calculateHRVForTimeRange(imei: string, startTime: string, endTime: string) {
-    const MS_PER_HOUR = 1000 * 60 * 60;
-    const BATCH_SIZE = 24; // Process 24 hours at a time
-
-    // 1. Rounding Logic
-    const roundedStartTs = Math.floor(new Date(startTime).getTime() / MS_PER_HOUR) * MS_PER_HOUR;
-    const roundedEndTs = Math.ceil(new Date(endTime).getTime() / MS_PER_HOUR) * MS_PER_HOUR;
-
-    // 2. Generate all timestamps (in Unix SECONDS, as strings)
-    const allTimestamps: string[] = [];
-    for (let ts = roundedStartTs; ts <= roundedEndTs; ts += MS_PER_HOUR) {
-        allTimestamps.push(String(ts / 1000));
+    if (!sleep.length || !sleep[0]) {
+        console.warn(`[calculateRMSSD] No sleep record found for ${imei} on ${date}`);
+        return null;
     }
 
-    const finalResults: any[] = [];
+    const rawSegs0 = sleep[0].segments;
+    const segments0: SleepSegment[] = Array.isArray(rawSegs0) ? rawSegs0 : JSON.parse(rawSegs0 as string);
 
-    // 3. Batch Processing Loop
-    for (let i = 0; i < allTimestamps.length; i += BATCH_SIZE) {
-        const chunk = allTimestamps.slice(i, i + BATCH_SIZE);
+    const hrData = segments0.flatMap(seg => seg.hrList ?? []);
 
-        const batchResults = await Promise.all(
-            chunk.map(async (timestamp) => {
-                try {
-                    const results = await calculateHRV(imei, timestamp);
-                    return { timestamp, ...results };
-                } catch (error: any) {
-                    return null;
-                }
-            })
-        );
+    const hourlyGroups: Record<number, HeartRateData[]> = {};
+    hrData.forEach(item => {
+        const hour = new Date(item.timestamp).getHours();
+        if (!hourlyGroups[hour]) hourlyGroups[hour] = [];
+        hourlyGroups[hour].push(item);
+    });
 
-        finalResults.push(...batchResults.filter(r => r !== null));
+    const mappedValues: HRVResult[] = Object.keys(hourlyGroups).map(hourKey => {
+        const hour = parseInt(hourKey, 10);
+        const currentHrData = hourlyGroups[hour];
+        const rrIntervals = hrListToRRIntervals(currentHrData);
+        const rmssdValue = computeRMSSD(rrIntervals);
+        const hourStr = String(hour).padStart(2, "0");
+        const timestamps = `${date}T${hourStr}:00:00.000Z`;
+        return { timestamps, value: rmssdValue };
+    });
+
+    if (!mappedValues.length) {
+        return null;
     }
 
-    return finalResults;
+    const result: HRVData = {
+        imei,
+        timestamp: date,
+        type: HRVType.RMSSD,
+        values: mappedValues
+    };
+    // await HRV_repo.saveHRV(result);
+    return result;
 }
+
+async function calculateSDNN(imei: string, date: string) {
+    // const existing = await HRV_repo.getHRV(imei, date, HRVType.SDNN);
+    // if (existing) return existing;
+
+    const sleep: SleepData[] = await SleepService.getSleepData(imei, date, date);
+    if (!sleep.length || !sleep[0]) {
+        console.warn(`[calculateSDNN] No sleep record found for ${imei} on ${date}`);
+        return null;
+    }
+
+    const rawSegs1 = sleep[0].segments;
+    const segments1: SleepSegment[] = Array.isArray(rawSegs1) ? rawSegs1 : JSON.parse(rawSegs1 as string);
+    const hrData = segments1.flatMap(seg => seg.hrList);
+    //split this by the hour
+    const hourlyGroups: Record<number, HeartRateData[]> = {};
+
+    hrData.forEach(item => {
+        const hour = new Date(item.timestamp).getHours(); // Extracts 0-23
+        if (!hourlyGroups[hour]) {
+            hourlyGroups[hour] = [];
+        }
+        hourlyGroups[hour].push(item);
+    });
+    //compute sdnn for each hour (it has its own function) (convert to rr interval also have its own function)
+    const mappedValues: HRVResult[] = Object.keys(hourlyGroups).map(hourKey => {
+        const hour = parseInt(hourKey, 10);
+        const currentHrData = hourlyGroups[hour];
+        // Convert the current hour's heart rate list to RR intervals
+        const rrIntervals = hrListToRRIntervals(currentHrData);
+
+        // Compute the SDNN value for this specific hour
+        const sdnnValue = computeSDNN(rrIntervals);
+        const hourStr = String(hour).padStart(2, "0");
+        const timestamps = `${date}T${hourStr}:00:00.000Z`;
+
+        return {
+            timestamps,
+            value: sdnnValue
+        };
+    });
+
+    if (!mappedValues.length) {
+        return null;
+    }
+
+    const result: HRVData = {
+        imei,
+        timestamp: date,
+        type: HRVType.SDNN,
+        values: mappedValues
+    };
+    // await HRV_repo.saveHRV(result);
+    return result;
+}
+
 
 export const HRVService = {
     calculateRMSSD,
     calculateSDNN,
     calculateHRV,
-    calculateHRVForTimeRange,
 };
