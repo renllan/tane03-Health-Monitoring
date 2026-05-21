@@ -112,13 +112,27 @@ export const EvaluationService = {
         return { level, value: current };
     },
 
-    /** HRV RMSSD: ±30% of baseline threshold */
+    /** HRV RMSSD: ±30% of baseline threshold based on 7-day average of daily maximums */
     async evaluateDayLevelRMSSD(imei: string, skipNotification = false, promises: Promise<any>[] = []): Promise<{ metric: "RMSSD"; level: Level; value: number | null }> {
-        console.log("evaluate Day Level RMSSD");
-        const today = getDateOffset(0);
-        const hrvRecords = await HRVService.calculateRMSSD(imei, today);
-        const rmssdValues = hrvRecords?.values.map(v => v.value);
-        if (!rmssdValues?.length) {
+        console.log("evaluate Day Level RMSSD (7-day average)");
+        const dates: string[] = [];
+        for (let i = -7; i <= 0; i++) {
+            dates.push(getDateOffset(i));
+        }
+
+        const results = await Promise.all(
+            dates.map(date => HRVService.calculateRMSSD(imei, date).catch(() => null))
+        );
+
+        const dailyValues = results
+            .filter((res) => res !== null && res !== undefined)
+            .map(res => {
+                const vals = res.values.map(v => v.value).filter(v => v > 0);
+                return vals.length > 0 ? Math.max(...vals) : null;
+            })
+            .filter((v): v is number => v !== null && v > 0);
+
+        if (!dailyValues.length) {
             return { metric: "RMSSD", level: "Invalid", value: null };
         }
 
@@ -127,20 +141,33 @@ export const EvaluationService = {
             return { metric: "RMSSD", level: "Invalid", value: null };
         }
 
-        const currentRMSSD = rmssdValues.reduce((a, b) => a + b, 0) / rmssdValues.length;
-        const level = evaluateDayLevel(currentRMSSD, baselineResult.baseline, baselineResult.baseline * 0.3, "other");
+        const averageRMSSD = dailyValues.reduce((a, b) => a + b, 0) / dailyValues.length;
+        const level = evaluateDayLevel(averageRMSSD, baselineResult.baseline, baselineResult.baseline * 0.3, "other");
         if (!skipNotification) promises.push(sendNotification(imei, "TESTING: Your HRV (RMSSD) is low today, indicating high stress or poor recovery."));
-        return { metric: "RMSSD", level, value: currentRMSSD };
+        return { metric: "RMSSD", level, value: averageRMSSD };
     },
 
-    /** HRV SDNN: ±30% of baseline threshold */
+    /** HRV SDNN: ±30% of baseline threshold based on 7-day average of daily maximums */
     async evaluateDayLevelSDNN(imei: string, skipNotification = false, promises: Promise<any>[] = []): Promise<{ metric: "SDNN"; level: Level; value: number | null }> {
-        console.log("evaluate Day Level SDNN");
-        const today = getDateOffset(0);
-        const hrvRecords = await HRVService.calculateSDNN(imei, today);
-        const sdnnValues = hrvRecords?.values.map(v => v.value);
+        console.log("evaluate Day Level SDNN (7-day average)");
+        const dates: string[] = [];
+        for (let i = -7; i <= 0; i++) {
+            dates.push(getDateOffset(i));
+        }
 
-        if (!sdnnValues?.length) {
+        const results = await Promise.all(
+            dates.map(date => HRVService.calculateSDNN(imei, date).catch(() => null))
+        );
+
+        const dailyValues = results
+            .filter((res) => res !== null && res !== undefined)
+            .map(res => {
+                const vals = res.values.map(v => v.value).filter(v => v > 0);
+                return vals.length > 0 ? Math.max(...vals) : null;
+            })
+            .filter((v): v is number => v !== null && v > 0);
+
+        if (!dailyValues.length) {
             return { metric: "SDNN", level: "Invalid", value: null };
         }
 
@@ -149,12 +176,11 @@ export const EvaluationService = {
             return { metric: "SDNN", level: "Invalid", value: null };
         }
 
-        const currentSDNN = sdnnValues.reduce((a, b) => a + b, 0) / sdnnValues.length;
-        const level = evaluateDayLevel(currentSDNN, baselineResult.baseline, baselineResult.baseline * 0.3, "other");
+        const averageSDNN = dailyValues.reduce((a, b) => a + b, 0) / dailyValues.length;
+        const level = evaluateDayLevel(averageSDNN, baselineResult.baseline, baselineResult.baseline * 0.3, "other");
         if (!skipNotification) promises.push(sendNotification(imei, "TESTING: Your HRV (SDNN) is low today, indicating high stress or poor recovery."));
-        return { metric: "SDNN", level, value: currentSDNN };
+        return { metric: "SDNN", level, value: averageSDNN };
     },
-
     /** Sleep Avg HR: ±30% of baseline threshold (higher than baseline = Poor) */
     async evaluateDayLevelSleepHeartRate(imei: string, skipNotification = false, promises: Promise<any>[] = []): Promise<{ level: Level; value: number | null }> {
         console.log("evaluating sleep heart rate");
