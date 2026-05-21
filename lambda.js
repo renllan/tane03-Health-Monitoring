@@ -18,16 +18,19 @@ exports.handler = async (event, context) => {
         console.log(`[Scheduler] Direct invocation for IMEI: ${imei}`);
 
         // Mock the Express req and res objects since the controller expects them
-        const req = { params: { imei } };
+        const req = {
+            params: { imei },
+            query: { skipNotification: 'false' }
+        };
         let responseBody = null;
         let responseStatus = 200;
-        
+
         const res = {
-            status: function(code) {
+            status: function (code) {
                 responseStatus = code;
                 return this;
             },
-            json: function(body) {
+            json: function (body) {
                 responseBody = body;
                 return this;
             }
@@ -36,13 +39,13 @@ exports.handler = async (event, context) => {
         try {
             // Call the controller directly
             await evaluationController.evaluateDay(req, res);
-            
+
             // This prints the final results clearly into your CloudWatch Logs!
             console.log(`[Scheduler] Evaluation Results for IMEI ${imei}:`, JSON.stringify(responseBody, null, 2));
 
-            return { 
-                statusCode: responseStatus, 
-                body: JSON.stringify(responseBody) 
+            return {
+                statusCode: responseStatus,
+                body: JSON.stringify(responseBody)
             };
         } catch (error) {
             console.error("[Scheduler] Error during scheduled evaluation:", error);
