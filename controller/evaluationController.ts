@@ -11,7 +11,7 @@ export const evaluationController = {
             const { imei } = req.params;
             if (!imei) return res.status(400).json({ error: "Missing required parameter: imei" });
 
-            const skipNotification = req.query.skipNotification === 'true';
+            const skipNotification = req.query?.skipNotification === 'true';
             const notificationPromises: Promise<any>[] = [];
 
             if (!skipNotification) {
