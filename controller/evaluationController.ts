@@ -19,20 +19,17 @@ export const evaluationController = {
                 await loginToAAASWatch(imei).catch(err => console.error("Cache pre-warm failed:", err));
             }
 
-            const [sleepScore, sleepDuration, rhr, hrv, sleepHeartRate] = await Promise.all([
+            const [sleepScore, sleepDuration, rhr, rmssd, sdnn, sleepHeartRate] = await Promise.all([
                 EvaluationService.evaluateDayLevelSleepScore(imei, skipNotification, notificationPromises),
                 EvaluationService.evaluateDayLevelSleepDuration(imei, skipNotification, notificationPromises),
                 EvaluationService.evaluateDayLevelRHR(imei, skipNotification, notificationPromises),
-                EvaluationService.evaluateDayLevelHRV(imei, skipNotification, notificationPromises),
+                EvaluationService.evaluateDayLevelRMSSD(imei, skipNotification, notificationPromises),
+                EvaluationService.evaluateDayLevelSDNN(imei, skipNotification, notificationPromises),
                 EvaluationService.evaluateDayLevelSleepHeartRate(imei, skipNotification, notificationPromises)
             ]);
 
-            let notificationsSent: any[] = [];
             if (notificationPromises.length > 0) {
-                const settled = await Promise.allSettled(notificationPromises);
-                notificationsSent = settled.map(res => 
-                    res.status === 'fulfilled' ? res.value : { success: false, error: res.reason?.message || res.reason }
-                );
+                await Promise.allSettled(notificationPromises);
             }
 
             return res.status(200).json({
@@ -42,10 +39,10 @@ export const evaluationController = {
                     sleepScore,
                     sleepDuration,
                     rhr,
-                    ...hrv,
+                    rmssd,
+                    sdnn,
                     sleepHeartRate
-                },
-                notifications: notificationsSent
+                }
             });
         } catch (error: any) {
             console.error("Error in evaluateDay:", error);
