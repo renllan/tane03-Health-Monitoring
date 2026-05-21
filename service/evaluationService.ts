@@ -103,7 +103,9 @@ export const EvaluationService = {
         const previousSevenDays = getDateOffset(-7);
         const sleepData = await RHRService.queryRHR(imei, previousSevenDays, today);
         if (!sleepData.length) return { level: "Invalid", value: null };
-        const current = sleepData.reduce((acc, item) => acc + (item.rhr ?? 0), 0) / sleepData.length;
+        const valid = sleepData.filter(r => r.rhr && r.rhr > 0);
+        if (!valid.length) return { level: "Invalid", value: null };
+        const current = valid.reduce((acc, item) => acc + (item.rhr ?? 0), 0) / valid.length;
         if (!current || current <= 0) return { level: "Invalid", value: null };
         const baselineResult = await calculateBaselines.getRHRBaseline(imei);
         if (baselineResult.status !== "Success" || !baselineResult.baseline) return { level: "Invalid", value: null };
