@@ -39,6 +39,6 @@ export const HRV_repo = {
                 "timestamp": data.timestamp
             }
         });
-        return docClient.send(command);
+        //return docClient.send(command);
     }
 };

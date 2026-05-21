@@ -71,8 +71,8 @@ async function calculateHRV(imei: string, date: string) {
 
 // Backward-compatible individual accessors
 async function calculateRMSSD(imei: string, date: string) {
-    // const existing = await HRV_repo.getHRV(imei, date, HRVType.RMSSD);
-    // if (existing) return existing;
+    const existing = await HRV_repo.getHRV(imei, date, HRVType.RMSSD);
+    if (existing) return existing;
 
     const sleep: SleepData[] = await SleepService.getSleepData(imei, date, date);
 
@@ -113,13 +113,13 @@ async function calculateRMSSD(imei: string, date: string) {
         type: HRVType.RMSSD,
         values: mappedValues
     };
-    // await HRV_repo.saveHRV(result);
+    await HRV_repo.saveHRV(result);
     return result;
 }
 
 async function calculateSDNN(imei: string, date: string) {
-    // const existing = await HRV_repo.getHRV(imei, date, HRVType.SDNN);
-    // if (existing) return existing;
+    const existing = await HRV_repo.getHRV(imei, date, HRVType.SDNN);
+    if (existing) return existing;
 
     const sleep: SleepData[] = await SleepService.getSleepData(imei, date, date);
     if (!sleep.length || !sleep[0]) {
@@ -168,7 +168,7 @@ async function calculateSDNN(imei: string, date: string) {
         type: HRVType.SDNN,
         values: mappedValues
     };
-    // await HRV_repo.saveHRV(result);
+    await HRV_repo.saveHRV(result);
     return result;
 }
 
