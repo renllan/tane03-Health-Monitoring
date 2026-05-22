@@ -3,6 +3,7 @@ import { HRVService } from "./calculateHRV";
 import { calculateBaselines, Level } from "./calculateBaselines";
 import { sendNotification } from "./sendNotification";
 import { RHRService } from "./rhr_service";
+import { StressService } from "./stress_service";
 // ─── Helpers (private) ────────────────────────────────────────────────────────
 
 function getDateOffset(days: number): string {
@@ -226,5 +227,164 @@ export const EvaluationService = {
     /** SDNN Trend: ±3 ms/week */
     evaluateWeekTrendSDNN(weeklyAverages: number[]): Level {
         return evaluateWeekLevel(calculateSlope(weeklyAverages), 3, "other");
+    },
+
+    /**
+     * Optimized combined evaluator — fetches ALL shared data in one parallel batch:
+     *   - Sleep records (D-7 → D0): used by sleepScore, sleepDuration, RHR, sleepAvgHR
+     *   - HRV per day (RMSSD + SDNN together): 8 days × 2 metrics but in one pass
+     *   - All 6 baselines: fetched in parallel (hits in-memory cache on warm Lambda)
+     *
+     * Replaces 10+ independent DB round-trips with 3 parallel batch fetches.
+     */
+    async evaluateDayAllMetrics(
+        imei: string,
+        skipNotification = false,
+        promises: Promise<any>[] = []
+    ): Promise<{
+        sleepScore: { level: Level; value: number | null };
+        sleepDuration: { level: Level; value: number | null };
+        rhr: { level: Level; value: number | null };
+        rmssd: { metric: "RMSSD"; level: Level; value: number | null };
+        sdnn: { metric: "SDNN"; level: Level; value: number | null };
+        sleepHeartRate: { level: Level; value: number | null };
+        stress: { level: Level; value: number | null };
+    }> {
+        const today = getDateOffset(0);
+        const D7 = getDateOffset(-7);
+        const dates = Array.from({ length: 8 }, (_, i) => getDateOffset(i - 7)); // D-7 … D0
+
+        // ── 1. Single parallel batch: sleep records + HRV per day + all baselines ──
+        const [sleepRecords, hrvPerDay, baselines, stressScoreResult] = await Promise.all([
+            SleepService.getSleepData(imei, D7, today),
+
+            // Fetch RMSSD and SDNN together for each day (8 days × 2 = 16 calls,
+            // but all fire concurrently; HRV repo caching means same-day data is shared)
+            Promise.all(dates.map(async date => ({
+                date,
+                rmssd: await HRVService.calculateRMSSD(imei, date).catch(() => null),
+                sdnn: await HRVService.calculateSDNN(imei, date).catch(() => null),
+            }))),
+
+            // All baselines in parallel; hits in-memory TTL cache on warm Lambda
+            Promise.all([
+                calculateBaselines.getSleepScoreBaseline(imei),
+                calculateBaselines.getSleepDurationBaseline(imei),
+                calculateBaselines.getRHRBaseline(imei),
+                calculateBaselines.getRMSSDBaseline(imei),
+                calculateBaselines.getSDNNBaseline(imei),
+                calculateBaselines.getSleepAvgHRBaseline(imei),
+                calculateBaselines.getStressBaseline(imei),
+            ]),
+
+            // Calculate the composite daily stress score
+            StressService.calculateDailyStressScore(imei, today).catch(() => null),
+        ]);
+
+        const [blSleepScore, blSleepDuration, blRHR, blRMSSD, blSDNN, blSleepAvgHR, blStress] = baselines;
+
+        // ── 2. Derive all averages from the pre-fetched sleep records ─────────────
+        const validSleep = sleepRecords.filter(r => (r.minutes ?? 0) >= 60);
+
+        // Sleep Score 7d avg (all records, including short ones)
+        const avgSleepScore = sleepRecords.length > 0
+            ? sleepRecords.reduce((a, r) => a + (r.sleepScore ?? 0), 0) / sleepRecords.length : null;
+
+        // Sleep Duration 7d avg (all records)
+        const avgSleepDuration = sleepRecords.length > 0
+            ? sleepRecords.reduce((a, r) => a + (r.minutes ?? 0), 0) / sleepRecords.length : null;
+
+        // RHR 7d avg (>= 60m sessions only)
+        const validRHR = validSleep.filter(r => (r.rhr ?? 0) > 0);
+        const avgRHR = validRHR.length > 0
+            ? validRHR.reduce((a, r) => a + (r.rhr ?? 0), 0) / validRHR.length : null;
+
+        // Sleep Avg HR 7d avg (>= 60m sessions only)
+        const validAvgHR = validSleep.filter(r => (r.avgHR ?? 0) > 0);
+        const avgSleepHR = validAvgHR.length > 0
+            ? validAvgHR.reduce((a, r) => a + (r.avgHR ?? 0), 0) / validAvgHR.length : null;
+
+        // ── 3. Derive RMSSD + SDNN averages from the pre-fetched HRV data ─────────
+        const rmssdDailyMaxes = hrvPerDay
+            .map(d => { const vals = d.rmssd?.values.map(v => v.value).filter(v => v > 0) ?? []; return vals.length ? Math.max(...vals) : null; })
+            .filter((v): v is number => v !== null);
+        const sdnnDailyMaxes = hrvPerDay
+            .map(d => { const vals = d.sdnn?.values.map(v => v.value).filter(v => v > 0) ?? []; return vals.length ? Math.max(...vals) : null; })
+            .filter((v): v is number => v !== null);
+
+        const avgRMSSD = rmssdDailyMaxes.length ? rmssdDailyMaxes.reduce((a, b) => a + b, 0) / rmssdDailyMaxes.length : null;
+        const avgSDNN = sdnnDailyMaxes.length ? sdnnDailyMaxes.reduce((a, b) => a + b, 0) / sdnnDailyMaxes.length : null;
+
+        // ── 4. Evaluate each metric ────────────────────────────────────────────────
+        const sleepScore: { level: Level; value: number | null } =
+            avgSleepScore && blSleepScore.status === "Success" && blSleepScore.baseline
+                ? (() => {
+                    const level = evaluateDayLevel(avgSleepScore, blSleepScore.baseline, 10, "other");
+                    if (!skipNotification) promises.push(sendNotification(imei, "TESTING: Your Sleep Score dropped significantly today. Try to rest!"));
+                    return { level, value: avgSleepScore };
+                })()
+                : { level: "Invalid", value: null };
+
+        const sleepDuration: { level: Level; value: number | null } =
+            avgSleepDuration && blSleepDuration.status === "Success" && blSleepDuration.durationBaseline
+                ? (() => {
+                    const level = evaluateDayLevel(avgSleepDuration, blSleepDuration.durationBaseline, blSleepDuration.durationBaseline * 0.3, "other");
+                    if (!skipNotification) promises.push(sendNotification(imei, "TESTING: Your sleep duration was unusually short. Consider an early bedtime!"));
+                    return { level, value: avgSleepDuration };
+                })()
+                : { level: "Invalid", value: null };
+
+        const rhr: { level: Level; value: number | null } =
+            avgRHR && blRHR.status === "Success" && blRHR.baseline
+                ? (() => {
+                    const level = evaluateDayLevel(avgRHR, blRHR.baseline, blRHR.baseline * 0.3, "rhr");
+                    if (!skipNotification) promises.push(sendNotification(imei, "TESTING: Your Resting Heart Rate is elevated. Your body might be under stress or recovering."));
+                    return { level, value: avgRHR };
+                })()
+                : { level: "Invalid", value: null };
+
+        const rmssd: { metric: "RMSSD"; level: Level; value: number | null } =
+            avgRMSSD && blRMSSD.status === "Success" && blRMSSD.baseline
+                ? (() => {
+                    const level = evaluateDayLevel(avgRMSSD, blRMSSD.baseline, blRMSSD.baseline * 0.3, "other");
+                    if (!skipNotification) promises.push(sendNotification(imei, "TESTING: Your HRV (RMSSD) is low today, indicating high stress or poor recovery."));
+                    return { metric: "RMSSD" as const, level, value: avgRMSSD };
+                })()
+                : { metric: "RMSSD" as const, level: "Invalid", value: null };
+
+        const sdnn: { metric: "SDNN"; level: Level; value: number | null } =
+            avgSDNN && blSDNN.status === "Success" && blSDNN.baseline
+                ? (() => {
+                    const level = evaluateDayLevel(avgSDNN, blSDNN.baseline, blSDNN.baseline * 0.3, "other");
+                    if (!skipNotification) promises.push(sendNotification(imei, "TESTING: Your HRV (SDNN) is low today, indicating high stress or poor recovery."));
+                    return { metric: "SDNN" as const, level, value: avgSDNN };
+                })()
+                : { metric: "SDNN" as const, level: "Invalid", value: null };
+
+        const sleepHeartRate: { level: Level; value: number | null } =
+            avgSleepHR && blSleepAvgHR.status === "Success" && blSleepAvgHR.baseline
+                ? (() => {
+                    const level = evaluateDayLevel(avgSleepHR, blSleepAvgHR.baseline, blSleepAvgHR.baseline * 0.3, "rhr");
+                    if (!skipNotification) promises.push(sendNotification(imei, "TESTING: Your Average Sleep Heart Rate is elevated. Your body might be under stress or recovering."));
+                    return { level, value: avgSleepHR };
+                })()
+                : { level: "Invalid", value: null };
+
+        // ── 5. Evaluate Stress (new) ──────────────────────────────────────────
+        const stress: { level: Level; value: number | null } =
+            stressScoreResult && stressScoreResult.stressScore !== null
+                ? (() => {
+                    const mappedLevel: Level = 
+                        stressScoreResult.stressLevel === "Low" ? "Good" :
+                        stressScoreResult.stressLevel === "Moderate" ? "Fair" :
+                        stressScoreResult.stressLevel === "High" ? "Poor" : "Invalid";
+                    if (!skipNotification && mappedLevel === "Poor") {
+                        promises.push(sendNotification(imei, "TESTING: Your Daily Stress level is highly elevated today. Take some deep breaths and rest!"));
+                    }
+                    return { level: mappedLevel, value: stressScoreResult.stressScore };
+                })()
+                : { level: "Invalid", value: null };
+
+        return { sleepScore, sleepDuration, rhr, rmssd, sdnn, sleepHeartRate, stress };
     },
 };

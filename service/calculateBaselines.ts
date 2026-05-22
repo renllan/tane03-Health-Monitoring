@@ -5,6 +5,7 @@ import { sendNotification } from "./sendNotification";
 import { BaselineData, BaselineType } from "../types/baselineType";
 import { SleepRepo } from "../repository/sleep_repo";
 import { HRVData } from "../types/HRVType";
+import { StressService } from "./stress_service";
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export type Level = "Good" | "Fair" | "Poor" | "Invalid";
@@ -79,6 +80,14 @@ function calculateSlope(weeklyAverages: number[]): number {
 }
 
 
+// ─── In-Memory Baseline Cache (Lambda execution context) ─────────────────────
+// Persists across warm Lambda invocations — avoids DynamoDB reads for repeat calls.
+const _baselineMemCache = new Map<string, { result: BaselineResult; expiry: number }>();
+const BASELINE_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+export function clearBaselineMemCache() {
+    _baselineMemCache.clear();
+}
 
 // ─── Main Export ──────────────────────────────────────────────────────────────
 
@@ -91,11 +100,21 @@ export const calculateBaselines = {
         valueExtractor: (res: BaselineResult) => number | undefined = (res) => res.baseline,
         resultBuilder: (baselineValue: number) => BaselineResult = (val) => ({ status: "Success", baseline: val })
     ): Promise<BaselineResult> {
-        // 1. Get from database first
-        console.log(`get ${type} baseline for imei ${imei}`); 8
+        const cacheKey = `${imei}#${type}`;
+
+        // 0. Check in-memory cache first (warm Lambda reuse, 0ms)
+        const mem = _baselineMemCache.get(cacheKey);
+        if (mem && Date.now() < mem.expiry) {
+            return mem.result;
+        }
+
+        // 1. Check DynamoDB cache
+        console.log(`get ${type} baseline for imei ${imei}`);
         const cached = await BaselineRepo.getBaseline(imei, type);
         if (cached) {
-            return resultBuilder(cached.baselineValue);
+            const result = resultBuilder(cached.baselineValue);
+            _baselineMemCache.set(cacheKey, { result, expiry: Date.now() + BASELINE_TTL_MS });
+            return result;
         }
 
         // 2. Calculate if missing
@@ -110,6 +129,7 @@ export const calculateBaselines = {
                     lastUpdated: new Date().toISOString()
                 };
                 await BaselineRepo.saveBaseline(data);
+                _baselineMemCache.set(cacheKey, { result, expiry: Date.now() + BASELINE_TTL_MS });
             }
         }
         return result;
@@ -165,6 +185,14 @@ export const calculateBaselines = {
         );
     },
 
+    async getStressBaseline(imei: string): Promise<BaselineResult> {
+        return this._getOrCalculate(
+            imei,
+            BaselineType.Stress,
+            () => this.calculateStressBaseline(imei)
+        );
+    },
+
     async calculateSleepAvgHRBaseline(imei: string): Promise<BaselineResult> {
         console.log("calculating sleep avg hr baseline for imei", imei)
         const startDate = getDateOffset(-60);
@@ -180,6 +208,34 @@ export const calculateBaselines = {
             status: "Success",
             baseline: slidingWindowBaseline(valid, "min"),
         }
+    },
+
+    async calculateStressBaseline(imei: string): Promise<BaselineResult> {
+        console.log("calculating stress baseline for imei", imei);
+
+        const dates: string[] = [];
+        for (let i = -60; i <= -1; i++) {
+            dates.push(getDateOffset(i));
+        }
+
+        // Fetch daily stress scores for each of the last 60 days in parallel
+        const results = await Promise.all(
+            dates.map(date => StressService.calculateDailyStressScore(imei, date).catch(() => null))
+        );
+        console.log("stress score results:", results);
+        const dailyValues = results
+            .filter((res: any) => res !== null && res !== undefined && res.stressScore !== null)
+            .map((res: any) => res.stressScore);
+
+        if (dailyValues.length < 7) {
+            return { status: "Error", message: "Not enough daily stress score data. Requires at least 7 valid days." };
+        }
+
+        return {
+            status: "Success",
+            // Lower stress = healthier state -> pick minimum window
+            baseline: slidingWindowBaseline(dailyValues, "min"),
+        };
     },
 
     // ── Sleep Baseline ────────────────────────────────────────────────────────
