@@ -65,7 +65,7 @@ export const EvaluationService = {
     // Fetches today's actual value + baseline via service, then evaluates.
 
     /** Sleep Score: ±5 points threshold */
-    async evaluateDayLevelSleepScore(imei: string, skipNotification = false, promises: Promise<any>[] = []): Promise<{ level: Level; value: number | null }> {
+    async evaluateDayLevelSleepScore(imei: string, skipNotification = true, promises: Promise<any>[] = []): Promise<{ level: Level; value: number | null }> {
         console.log("evaluate Day Level SleepScore");
         const today = getDateOffset(0);
         const previousSevenDays = getDateOffset(-7);
@@ -81,7 +81,7 @@ export const EvaluationService = {
     },
 
     /** Sleep Duration: ±30% of baseline threshold */
-    async evaluateDayLevelSleepDuration(imei: string, skipNotification = false, promises: Promise<any>[] = []): Promise<{ level: Level; value: number | null }> {
+    async evaluateDayLevelSleepDuration(imei: string, skipNotification = true, promises: Promise<any>[] = []): Promise<{ level: Level; value: number | null }> {
         console.log("evaluate Day Level sleep Duration");
         const today = getDateOffset(0);
         const previousSevenDays = getDateOffset(-7);
@@ -97,7 +97,7 @@ export const EvaluationService = {
     },
 
     /** RHR: ±10% of baseline threshold (higher than baseline = Poor) */
-    async evaluateDayLevelRHR(imei: string, skipNotification = false, promises: Promise<any>[] = []): Promise<{ level: Level; value: number | null }> {
+    async evaluateDayLevelRHR(imei: string, skipNotification = true, promises: Promise<any>[] = []): Promise<{ level: Level; value: number | null }> {
         console.log("evaluate Day Level RHR");
         const today = getDateOffset(0);
         const previousSevenDays = getDateOffset(-7);
@@ -115,7 +115,7 @@ export const EvaluationService = {
     },
 
     /** HRV RMSSD: ±30% of baseline threshold based on 7-day average of daily maximums */
-    async evaluateDayLevelRMSSD(imei: string, skipNotification = false, promises: Promise<any>[] = []): Promise<{ metric: "RMSSD"; level: Level; value: number | null }> {
+    async evaluateDayLevelRMSSD(imei: string, skipNotification = true, promises: Promise<any>[] = []): Promise<{ metric: "RMSSD"; level: Level; value: number | null }> {
         console.log("evaluate Day Level RMSSD (7-day average)");
         const dates: string[] = [];
         for (let i = -7; i <= 0; i++) {
@@ -150,7 +150,7 @@ export const EvaluationService = {
     },
 
     /** HRV SDNN: ±30% of baseline threshold based on 7-day average of daily maximums */
-    async evaluateDayLevelSDNN(imei: string, skipNotification = false, promises: Promise<any>[] = []): Promise<{ metric: "SDNN"; level: Level; value: number | null }> {
+    async evaluateDayLevelSDNN(imei: string, skipNotification = true, promises: Promise<any>[] = []): Promise<{ metric: "SDNN"; level: Level; value: number | null }> {
         console.log("evaluate Day Level SDNN (7-day average)");
         const dates: string[] = [];
         for (let i = -7; i <= 0; i++) {
@@ -184,7 +184,7 @@ export const EvaluationService = {
         return { metric: "SDNN", level, value: averageSDNN };
     },
     /** Sleep Avg HR: ±30% of baseline threshold (higher than baseline = Poor) */
-    async evaluateDayLevelSleepHeartRate(imei: string, skipNotification = false, promises: Promise<any>[] = []): Promise<{ level: Level; value: number | null }> {
+    async evaluateDayLevelSleepHeartRate(imei: string, skipNotification = true, promises: Promise<any>[] = []): Promise<{ level: Level; value: number | null }> {
         console.log("evaluating sleep heart rate");
         const today = getDateOffset(0);
         const previousSevenDays = getDateOffset(-7);
@@ -192,7 +192,7 @@ export const EvaluationService = {
         if (!sleepHeartRateData.length) return { level: "Invalid", value: null };
         const sleepHeartRateValues = sleepHeartRateData.map(r => r.avgHR).filter(v => v > 0);
         if (!sleepHeartRateValues.length) return { level: "Invalid", value: null };
-        const sleepHeartRate = sleepHeartRateValues.reduce((acc, item) => acc + item, 0) / sleepHeartRateData.length;
+        const sleepHeartRate = sleepHeartRateValues.reduce((acc, item) => acc + item, 0) / sleepHeartRateValues.length;
         if (!sleepHeartRate || sleepHeartRate <= 0) return { level: "Invalid", value: null };
         const baselineResult = await calculateBaselines.getSleepAvgHRBaseline(imei);
         if (baselineResult.status !== "Success" || !baselineResult.baseline) return { level: "Invalid", value: null };

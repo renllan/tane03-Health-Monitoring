@@ -165,16 +165,13 @@ export const calculateBaselines = {
         );
     },
 
-
     async calculateSleepAvgHRBaseline(imei: string): Promise<BaselineResult> {
         console.log("calculating sleep avg hr baseline for imei", imei)
-        const startDate = getDateOffset(-28);
+        const startDate = getDateOffset(-60);
         const endDate = getDateOffset(-1);
         const records = await SleepService.getSleepData(imei, startDate, endDate);
-        const valid = records
-            .filter((r: any) => r.minutes >= 60 && r.avgHR && r.avgHR > 0)
-            .map((r: any) => r.avgHR);
-
+        const valid = records.filter((r: any) => r.avgHR && r.minutes >= 30).map((r: any) => r.avgHR);
+        console.log("valid sleep records:", valid);
         if (valid.length < 7) {
             return { status: "Error", message: "Not enough sleep data (with duration >= 60m) for baseline calculation." };
         }
@@ -200,7 +197,6 @@ export const calculateBaselines = {
         // Use the service directly, which handles both fetching from cache and backfilling missing data via Lambda
         const records = await SleepService.getSleepData(imei, startDate, endDate);
         const valid = records.filter((r: any) => r.sleepScore > 0 && r.minutes >= 60);
-
         if (valid.length < 7) {
             return { status: "Error", message: "Not enough sleep data even after calculation. Requires at least 7 valid days." };
         }
