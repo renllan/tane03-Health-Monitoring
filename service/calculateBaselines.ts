@@ -48,6 +48,7 @@ function slidingWindowBaseline(values: number[], pickBest: "max" | "min"): numbe
         windowAverages.push(slice.reduce((sum, v) => sum + v, 0) / WINDOW);
     }
 
+    console.log("window averages", windowAverages);
     return pickBest === "max"
         ? Math.max(...windowAverages)
         : Math.min(...windowAverages);
@@ -164,20 +165,15 @@ export const calculateBaselines = {
         );
     },
 
-
     async calculateSleepAvgHRBaseline(imei: string): Promise<BaselineResult> {
         console.log("calculating sleep avg hr baseline for imei", imei)
-        const startDate = getDateOffset(-28);
+        const startDate = getDateOffset(-60);
         const endDate = getDateOffset(-1);
-        const records = await SleepService.querySleepAvgHeartRate(imei, startDate, endDate);
-        if (records.length < 7) {
-            return { status: "Error", message: "Not enough sleep data for baseline calculation." };
-        }
-        // Iterate over the last 4 weeks backwards
-        //filter out data where avgHR is 0
-        const valid = records.filter((r: any) => r.avgHR > 0).map((r: any) => r.avgHR);
+        const records = await SleepService.getSleepData(imei, startDate, endDate);
+        const valid = records.filter((r: any) => r.avgHR && r.minutes >= 30).map((r: any) => r.avgHR);
+        console.log("valid sleep records:", valid);
         if (valid.length < 7) {
-            return { status: "Error", message: "Not enough sleep data for baseline calculation." };
+            return { status: "Error", message: "Not enough sleep data (with duration >= 60m) for baseline calculation." };
         }
 
         return {
@@ -190,18 +186,17 @@ export const calculateBaselines = {
 
     /**
      * Baseline = highest 7-day sliding window average of sleep score.
-     * Query range: D-28 to D-1.
+     * Query range: D-60 to D-1.
      * Excludes days with missing or zero sleep score / duration.
      */
     async calculateSleepBaseline(imei: string): Promise<BaselineResult> {
         console.log("calculating sleep baseline for imei", imei)
-        const startDate = getDateOffset(-28); // D-28
+        const startDate = getDateOffset(-60); // D-28
         const endDate = getDateOffset(-1);  // D-1
 
         // Use the service directly, which handles both fetching from cache and backfilling missing data via Lambda
         const records = await SleepService.getSleepData(imei, startDate, endDate);
-        const valid = records.filter((r: any) => r.sleepScore > 0 && r.minutes > 0);
-
+        const valid = records.filter((r: any) => r.sleepScore > 0 && r.minutes >= 60);
         if (valid.length < 7) {
             return { status: "Error", message: "Not enough sleep data even after calculation. Requires at least 7 valid days." };
         }
@@ -218,16 +213,16 @@ export const calculateBaselines = {
     /**
      * Baseline = lowest 7-day sliding window average of RHR.
      * RHR data is sourced from sleep records (recorded during sleep).
-     * Query range: D-28 to D-1.
+     * Query range: D-60 to D-1.
      */
     async calculateRHRBaseline(imei: string): Promise<BaselineResult> {
         console.log("calculating rhr baseline for imei", imei)
-        const startDate = getDateOffset(-28);
+        const startDate = getDateOffset(-60);
         const endDate = getDateOffset(-1);
 
         // Use the service directly, which handles both fetching from cache and backfilling missing data via Lambda
         const records = await SleepService.getSleepData(imei, startDate, endDate);
-        const valid = records.filter((r: any) => r.rhr > 0);
+        const valid = records.filter((r: any) => r.minutes >= 60 && r.rhr && r.rhr > 0);
 
         if (valid.length < 7) {
             return { status: "Error", message: "Not enough RHR data even after calculation. Requires at least 7 valid days." };
