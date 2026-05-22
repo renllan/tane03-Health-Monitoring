@@ -5,7 +5,7 @@ import { loginToAAASWatch } from '../service/loginToAAASWatch';
 export const evaluationController = {
 
     // GET /api/evaluate/:imei/day
-    // Runs all 4 day-level evaluators and returns the levels
+    // Runs all day-level evaluators via a single optimized batch fetch
     async evaluateDay(req: Request, res: Response) {
         try {
             const { imei } = req.params;
@@ -15,18 +15,12 @@ export const evaluationController = {
             const notificationPromises: Promise<any>[] = [];
 
             if (!skipNotification) {
-                // Pre-warm the cache so concurrent evaluations don't trigger multiple logins
+                // Pre-warm the auth cache so concurrent notifications don't trigger multiple logins
                 await loginToAAASWatch(imei).catch(err => console.error("Cache pre-warm failed:", err));
             }
 
-            const [sleepScore, sleepDuration, rhr, rmssd, sdnn, sleepHeartRate] = await Promise.all([
-                EvaluationService.evaluateDayLevelSleepScore(imei, skipNotification, notificationPromises),
-                EvaluationService.evaluateDayLevelSleepDuration(imei, skipNotification, notificationPromises),
-                EvaluationService.evaluateDayLevelRHR(imei, skipNotification, notificationPromises),
-                EvaluationService.evaluateDayLevelRMSSD(imei, skipNotification, notificationPromises),
-                EvaluationService.evaluateDayLevelSDNN(imei, skipNotification, notificationPromises),
-                EvaluationService.evaluateDayLevelSleepHeartRate(imei, skipNotification, notificationPromises)
-            ]);
+            // Single call — pre-fetches all sleep data, HRV, and baselines in one batch
+            const evaluation = await EvaluationService.evaluateDayAllMetrics(imei, skipNotification, notificationPromises);
 
             if (notificationPromises.length > 0) {
                 await Promise.allSettled(notificationPromises);
@@ -35,14 +29,7 @@ export const evaluationController = {
             return res.status(200).json({
                 imei,
                 date: new Date().toISOString().split('T')[0],
-                evaluation: {
-                    sleepScore,
-                    sleepDuration,
-                    rhr,
-                    rmssd,
-                    sdnn,
-                    sleepHeartRate
-                }
+                evaluation
             });
         } catch (error: any) {
             console.error("Error in evaluateDay:", error);

@@ -1,7 +1,7 @@
 import { HRVService } from "./calculateHRV";
 import { SleepService } from "./sleepService";
 import { calculateBaselines } from "./calculateBaselines";
-import { DailyStressScore, DailyStressResult, StressResultPoint } from "@/types/stressType";
+import { DailyStressScore, DailyStressResult, StressResultPoint } from "../types/stressType";
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 
