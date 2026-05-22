@@ -31,9 +31,12 @@ export const baselineController = {
                 case 'sleepavghr':
                     result = await calculateBaselines.getSleepAvgHRBaseline(imei);
                     break;
+                case 'stress':
+                    result = await calculateBaselines.getStressBaseline(imei);
+                    break;
                 default:
                     return res.status(400).json({
-                        error: `Invalid baseline type: ${type}. Valid types are sleepDuration, sleepScore, rhr, rmssd, sdnn.`
+                        error: `Invalid baseline type: ${type}. Valid types are sleepDuration, sleepScore, rhr, rmssd, sdnn, sleepAvgHR, stress.`
                     });
             }
 
@@ -58,13 +61,14 @@ export const baselineController = {
             }
 
             // Execute all baseline calculations concurrently
-            const [sleepDuration, sleepScore, rhr, rmssd, sdnn, sleepAvgHR] = await Promise.all([
+            const [sleepDuration, sleepScore, rhr, rmssd, sdnn, sleepAvgHR, stress] = await Promise.all([
                 calculateBaselines.getSleepDurationBaseline(imei),
                 calculateBaselines.getSleepScoreBaseline(imei),
                 calculateBaselines.getRHRBaseline(imei),
                 calculateBaselines.getRMSSDBaseline(imei),
                 calculateBaselines.getSDNNBaseline(imei),
-                calculateBaselines.getSleepAvgHRBaseline(imei)
+                calculateBaselines.getSleepAvgHRBaseline(imei),
+                calculateBaselines.getStressBaseline(imei)
             ]);
 
             return res.status(200).json({
@@ -75,7 +79,8 @@ export const baselineController = {
                     rhr,
                     rmssd,
                     sdnn,
-                    sleepAvgHR
+                    sleepAvgHR,
+                    stress
                 }
             });
 
