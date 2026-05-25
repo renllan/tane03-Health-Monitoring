@@ -13,7 +13,7 @@ export const stressController = {
             const dateStr = (req.query.date as string) || new Date().toISOString().split('T')[0];
 
             console.log(`Calculating stress for imei ${imei} on date ${dateStr}`);
-            const result = await StressService.calculateDailyStress(imei, dateStr);
+            const result = await StressService.calculateDailyStressScore(imei, dateStr);
 
             return res.status(200).json(result);
         } catch (error: any) {
