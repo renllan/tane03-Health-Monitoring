@@ -4,8 +4,10 @@ import { HRVService } from "./calculateHRV";
 import { sendNotification } from "./sendNotification";
 import { BaselineData, BaselineType } from "../types/baselineType";
 import { SleepRepo } from "../repository/sleep_repo";
-import { HRVData } from "../types/HRVType";
+import { HRVData, HRVType } from "../types/HRVType";
 import { StressService } from "./stress_service";
+import { PreloadedStressData } from "../types/stressType";
+import { HRV_repo } from "../repository/HRV_repo";
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export type Level = "Good" | "Fair" | "Poor" | "Invalid";
@@ -81,9 +83,8 @@ function calculateSlope(weeklyAverages: number[]): number {
 
 
 // ─── In-Memory Baseline Cache (Lambda execution context) ─────────────────────
-// Persists across warm Lambda invocations — avoids DynamoDB reads for repeat calls.
-const _baselineMemCache = new Map<string, { result: BaselineResult; expiry: number }>();
-const BASELINE_TTL_MS = 60 * 60 * 1000; // 1 hour
+// Caches the PROMISE of the baseline request to prevent cache stampedes (thundering herd).
+const _baselineMemCache = new Map<string, Promise<BaselineResult>>();
 
 export function clearBaselineMemCache() {
     _baselineMemCache.clear();
@@ -102,37 +103,45 @@ export const calculateBaselines = {
     ): Promise<BaselineResult> {
         const cacheKey = `${imei}#${type}`;
 
-        // 0. Check in-memory cache first (warm Lambda reuse, 0ms)
-        const mem = _baselineMemCache.get(cacheKey);
-        if (mem && Date.now() < mem.expiry) {
-            return mem.result;
+        // 0. Check if there is already an active or resolved promise in the cache
+        let promise = _baselineMemCache.get(cacheKey);
+        if (promise) {
+            return promise;
         }
 
-        // 1. Check DynamoDB cache
-        console.log(`get ${type} baseline for imei ${imei}`);
-        const cached = await BaselineRepo.getBaseline(imei, type);
-        if (cached) {
-            const result = resultBuilder(cached.baselineValue);
-            _baselineMemCache.set(cacheKey, { result, expiry: Date.now() + BASELINE_TTL_MS });
-            return result;
-        }
+        // 1. Create the promise that handles checking DB and calculating
+        promise = (async () => {
+            try {
+                console.log(`get ${type} baseline for imei ${imei}`);
+                const cached = await BaselineRepo.getBaseline(imei, type);
+                if (cached) {
+                    return resultBuilder(cached.baselineValue);
+                }
 
-        // 2. Calculate if missing
-        const result = await calculateFn();
-        if (result.status === "Success") {
-            const val = valueExtractor(result);
-            if (val !== undefined) {
-                const data: BaselineData = {
-                    imei,
-                    type,
-                    baselineValue: val,
-                    lastUpdated: new Date().toISOString()
-                };
-                await BaselineRepo.saveBaseline(data);
-                _baselineMemCache.set(cacheKey, { result, expiry: Date.now() + BASELINE_TTL_MS });
+                // 2. Calculate if missing
+                const result = await calculateFn();
+                if (result.status === "Success") {
+                    const val = valueExtractor(result);
+                    if (val !== undefined) {
+                        const data: BaselineData = {
+                            imei,
+                            type,
+                            baselineValue: val,
+                            lastUpdated: new Date().toISOString()
+                        };
+                        await BaselineRepo.saveBaseline(data);
+                    }
+                }
+                return result;
+            } catch (error) {
+                // If it fails, delete it from cache so subsequent requests can try again
+                _baselineMemCache.delete(cacheKey);
+                throw error;
             }
-        }
-        return result;
+        })();
+
+        _baselineMemCache.set(cacheKey, promise);
+        return promise;
     },
 
     async getSleepDurationBaseline(imei: string): Promise<BaselineResult> {
@@ -213,19 +222,69 @@ export const calculateBaselines = {
     async calculateStressBaseline(imei: string): Promise<BaselineResult> {
         console.log("calculating stress baseline for imei", imei);
 
+        // D-67 gives us enough look-back so that even the earliest of the 60
+        // target dates (D-60) can still form a full 7-day trailing window.
+        const bulkStart = getDateOffset(-67);
+        const bulkEnd   = getDateOffset(-1);
+
         const dates: string[] = [];
         for (let i = -60; i <= -1; i++) {
             dates.push(getDateOffset(i));
         }
 
-        // Fetch daily stress scores for each of the last 60 days in parallel
+        // ── 1. Bulk-preload all raw data in parallel (3 queries total) ─────────
+        // Each of these hits the DB exactly once for the full range instead of
+        // being repeated inside every calculateDailyStressScore call.
+        const [
+            allSleepData,
+            allSleepAvgHR,
+            rmssdMap,
+            rmssdBaseline,
+            rhrBaseline,
+            sleepAvgHRBaseline,
+            sleepScoreBaseline,
+            sleepDurationBaseline,
+        ] = await Promise.all([
+            SleepService.getSleepData(imei, bulkStart, bulkEnd),
+            SleepService.querySleepAvgHeartRate(imei, bulkStart, bulkEnd),
+            // Single range query replaces 60+ individual GetItem calls for RMSSD
+            HRV_repo.queryHRVRange(imei, HRVType.RMSSD, bulkStart, bulkEnd),
+            // Static baselines — resolved from in-memory cache after first call
+            this.getRMSSDBaseline(imei),
+            this.getRHRBaseline(imei),
+            this.getSleepAvgHRBaseline(imei),
+            this.getSleepScoreBaseline(imei),
+            this.getSleepDurationBaseline(imei),
+        ]);
+
+        // ── 2. Build the shared preloaded context ──────────────────────────────
+        const preloaded: PreloadedStressData = {
+            sleepData:   allSleepData,
+            sleepAvgHR:  allSleepAvgHR,
+            rmssd:       rmssdMap,
+            baselines: {
+                rmssd:         rmssdBaseline,
+                rhr:           rhrBaseline,
+                sleepAvgHR:    sleepAvgHRBaseline,
+                sleepScore:    sleepScoreBaseline,
+                sleepDuration: sleepDurationBaseline,
+            },
+        };
+
+        // ── 3. Compute 60 daily scores in parallel — all in-memory, zero I/O ──
         const results = await Promise.all(
-            dates.map(date => StressService.calculateDailyStressScore(imei, date).catch(() => null))
+            dates.map(date =>
+                StressService.calculateDailyStressScore(imei, date, preloaded)
+                    .catch(() => null)
+            )
         );
         console.log("stress score results:", results);
+
         const dailyValues = results
-            .filter((res: any) => res !== null && res !== undefined && res.stressScore !== null)
-            .map((res: any) => res.stressScore);
+            .filter((res): res is NonNullable<typeof res> =>
+                res !== null && res.stressScore !== null
+            )
+            .map(res => res.stressScore as number);
 
         if (dailyValues.length < 7) {
             return { status: "Error", message: "Not enough daily stress score data. Requires at least 7 valid days." };
@@ -233,7 +292,7 @@ export const calculateBaselines = {
 
         return {
             status: "Success",
-            // Lower stress = healthier state -> pick minimum window
+            // Lower stress = healthier state → pick minimum window
             baseline: slidingWindowBaseline(dailyValues, "min"),
         };
     },

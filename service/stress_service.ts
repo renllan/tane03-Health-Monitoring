@@ -1,7 +1,7 @@
 import { HRVService } from "./calculateHRV";
 import { SleepService } from "./sleepService";
 import { calculateBaselines } from "./calculateBaselines";
-import { DailyStressScore, DailyStressResult, StressResultPoint } from "../types/stressType";
+import { DailyStressScore, DailyStressResult, StressResultPoint, PreloadedStressData } from "../types/stressType";
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 
@@ -37,53 +37,6 @@ function deviationToStress(deviation: number, threshold: number): number {
 export const StressService = {
 
     /**
-     * Hourly SDNN-based stress points for the day (existing logic).
-     * Used by the stress chart in the dashboard.
-     */
-    async calculateDailyStress(imei: string, dateStr: string): Promise<DailyStressResult> {
-        const sdnnRecord = await HRVService.calculateSDNN(imei, dateStr);
-
-        const points: StressResultPoint[] = [];
-        const summary = { lowHours: 0, midHours: 0, highHours: 0 };
-
-        if (!sdnnRecord || !sdnnRecord.values || sdnnRecord.values.length === 0) {
-            return { imei, date: dateStr, points, summary };
-        }
-
-        const baselineResult = await calculateBaselines.getSDNNBaseline(imei);
-        const baselineSDNN = (baselineResult.status === "Success" && baselineResult.baseline && baselineResult.baseline > 0)
-            ? baselineResult.baseline
-            : 30;
-
-        for (const item of sdnnRecord.values) {
-            const sdnn = item.value;
-            if (sdnn <= 0) continue;
-
-            const changeRate = ((sdnn - baselineSDNN) / baselineSDNN) * 100;
-            const scaleFactor = 1 / (1 + Math.abs(changeRate) * 0.01);
-            const multiplier = changeRate < 0
-                ? 0.4 + (1.0 - scaleFactor) * 0.2
-                : 1.0 - scaleFactor * 0.3;
-            const adjustedRate = changeRate * multiplier;
-            const offset = Math.min(changeRate < 0 ? 55 : 45, Math.abs(adjustedRate));
-            const index = changeRate < 0 ? 45 + offset : 45 - offset;
-            const stressIndex = Math.max(0, Math.min(100, index));
-
-            if (stressIndex <= 32) summary.lowHours++;
-            else if (stressIndex <= 65) summary.midHours++;
-            else summary.highHours++;
-
-            points.push({
-                timestamp: item.timestamps,
-                stressIndex: Math.round(stressIndex * 10) / 10
-            });
-        }
-
-        points.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-        return { imei, date: dateStr, points, summary };
-    },
-
-    /**
      * Composite daily stress score (0–100) using 5 physiological metrics.
      * 
      * Weights:
@@ -94,8 +47,17 @@ export const StressService = {
      *   - Sleep Dur    10%  (shorter dur  = more stress)
      * 
      * Score 0–33 = Low, 34–66 = Moderate, 67–100 = High
+     * 
+     * @param preloaded  Optional bulk-preloaded context. When provided (e.g.
+     *                   during baseline calculation), ALL data is retrieved
+     *                   from memory — zero DB or API calls are made. When
+     *                   omitted, falls back to individual async queries.
      */
-    async calculateDailyStressScore(imei: string, targetDateStr?: string): Promise<DailyStressScore> {
+    async calculateDailyStressScore(
+        imei: string,
+        targetDateStr?: string,
+        preloaded?: PreloadedStressData
+    ): Promise<DailyStressScore> {
         const today = targetDateStr || getDateOffset(0);
 
         const getRelativeDateOffset = (offsetDays: number): string => {
@@ -106,35 +68,67 @@ export const StressService = {
 
         const sevenDaysAgo = getRelativeDateOffset(-7);
 
-        // ── Fetch all data in parallel ────────────────────────────────────────
-        const [
-            sleepRecords,
-            sleepAvgHRRecords,
-            rmssdBaseline,
-            rhrBaseline,
-            sleepAvgHRBaseline,
-            sleepScoreBaseline,
-            sleepDurationBaseline,
-        ] = await Promise.all([
-            SleepService.getSleepData(imei, sevenDaysAgo, today),
-            SleepService.querySleepAvgHeartRate(imei, sevenDaysAgo, today),
-            calculateBaselines.getRMSSDBaseline(imei),
-            calculateBaselines.getRHRBaseline(imei),
-            calculateBaselines.getSleepAvgHRBaseline(imei),
-            calculateBaselines.getSleepScoreBaseline(imei),
-            calculateBaselines.getSleepDurationBaseline(imei),
-        ]);
+        // ── Fetch data: in-memory (preloaded) or individual DB queries ────────
+        let sleepRecords: any[];
+        let sleepAvgHRRecords: any[];
+        let rmssdBaseline: any;
+        let rhrBaseline: any;
+        let sleepAvgHRBaseline: any;
+        let sleepScoreBaseline: any;
+        let sleepDurationBaseline: any;
+        let rmssdResults: any[];
+
+        if (preloaded) {
+            // ── Fast in-memory path (bulk baseline mode) ─────────────────────
+            // Filter the pre-fetched arrays by the 7-day window for this date.
+            sleepRecords = preloaded.sleepData.filter(
+                r => r.date >= sevenDaysAgo && r.date <= today
+            );
+            sleepAvgHRRecords = preloaded.sleepAvgHR.filter(
+                r => r.date >= sevenDaysAgo && r.date <= today
+            );
+            rmssdBaseline      = preloaded.baselines.rmssd;
+            rhrBaseline        = preloaded.baselines.rhr;
+            sleepAvgHRBaseline = preloaded.baselines.sleepAvgHR;
+            sleepScoreBaseline = preloaded.baselines.sleepScore;
+            sleepDurationBaseline = preloaded.baselines.sleepDuration;
+
+            // Build the 8-day RMSSD list from the preloaded map
+            const rmssddates: string[] = [];
+            for (let i = -7; i <= 0; i++) rmssddates.push(getRelativeDateOffset(i));
+            rmssdResults = rmssddates.map(d => preloaded.rmssd[d] ?? null);
+        } else {
+            // ── Original async path (single-day real-time evaluation) ─────────
+            [
+                sleepRecords,
+                sleepAvgHRRecords,
+                rmssdBaseline,
+                rhrBaseline,
+                sleepAvgHRBaseline,
+                sleepScoreBaseline,
+                sleepDurationBaseline,
+            ] = await Promise.all([
+                SleepService.getSleepData(imei, sevenDaysAgo, today),
+                SleepService.querySleepAvgHeartRate(imei, sevenDaysAgo, today),
+                calculateBaselines.getRMSSDBaseline(imei),
+                calculateBaselines.getRHRBaseline(imei),
+                calculateBaselines.getSleepAvgHRBaseline(imei),
+                calculateBaselines.getSleepScoreBaseline(imei),
+                calculateBaselines.getSleepDurationBaseline(imei),
+            ]);
+
+            const rmssddates: string[] = [];
+            for (let i = -7; i <= 0; i++) rmssddates.push(getRelativeDateOffset(i));
+            rmssdResults = await Promise.all(
+                rmssddates.map(d => HRVService.calculateRMSSD(imei, d).catch(() => null))
+            );
+        }
 
         // ── 7-day averages from RMSSD (daily max of each sleep window) ────────
-        const rmssddates: string[] = [];
-        for (let i = -7; i <= 0; i++) rmssddates.push(getRelativeDateOffset(i));
-        const rmssdResults = await Promise.all(
-            rmssddates.map(d => HRVService.calculateRMSSD(imei, d).catch(() => null))
-        );
         const rmssdDailyMaxes = rmssdResults
             .filter(r => r !== null && r !== undefined)
             .map(r => {
-                const vals = r!.values.map(v => v.value).filter(v => v > 0);
+                const vals = r!.values.map((v: any) => v.value).filter((v: number) => v > 0);
                 return vals.length > 0 ? Math.max(...vals) : null;
             })
             .filter((v): v is number => v !== null && v > 0);
@@ -145,22 +139,22 @@ export const StressService = {
         // ── 7-day average RHR (only real sleep sessions >= 60m) ───────────────
         const validRHRRecords = sleepRecords.filter(r => (r.minutes ?? 0) >= 60 && (r.rhr ?? 0) > 0);
         const avgRHR = validRHRRecords.length > 0
-            ? validRHRRecords.reduce((acc, r) => acc + (r.rhr ?? 0), 0) / validRHRRecords.length
+            ? validRHRRecords.reduce((acc: number, r: any) => acc + (r.rhr ?? 0), 0) / validRHRRecords.length
             : null;
 
         // ── 7-day average Sleep Avg HR (only valid readings) ─────────────────
-        const validAvgHRValues = sleepAvgHRRecords.map(r => r.avgHR).filter(v => v && v > 0);
+        const validAvgHRValues = sleepAvgHRRecords.map((r: any) => r.avgHR).filter((v: any) => v && v > 0);
         const avgSleepHR = validAvgHRValues.length > 0
-            ? validAvgHRValues.reduce((a, b) => a + b, 0) / validAvgHRValues.length
+            ? validAvgHRValues.reduce((a: number, b: number) => a + b, 0) / validAvgHRValues.length
             : null;
 
         // ── 7-day average Sleep Score & Duration (>= 60m sessions only) ──────
         const validSleepRecords = sleepRecords.filter(r => (r.minutes ?? 0) >= 60 && (r.sleepScore ?? 0) > 0);
         const avgSleepScore = validSleepRecords.length > 0
-            ? validSleepRecords.reduce((acc, r) => acc + (r.sleepScore ?? 0), 0) / validSleepRecords.length
+            ? validSleepRecords.reduce((acc: number, r: any) => acc + (r.sleepScore ?? 0), 0) / validSleepRecords.length
             : null;
         const avgSleepDuration = validSleepRecords.length > 0
-            ? validSleepRecords.reduce((acc, r) => acc + (r.minutes ?? 0), 0) / validSleepRecords.length
+            ? validSleepRecords.reduce((acc: number, r: any) => acc + (r.minutes ?? 0), 0) / validSleepRecords.length
             : null;
 
         // ── Extract baselines ────────────────────────────────────────────────
