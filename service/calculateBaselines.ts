@@ -224,7 +224,7 @@ export const calculateBaselines = {
 
         // D-67 gives us enough look-back so that even the earliest of the 60
         // target dates (D-60) can still form a full 7-day trailing window.
-        const bulkStart = getDateOffset(-67);
+        const bulkStart = getDateOffset(-60);
         const bulkEnd   = getDateOffset(-1);
 
         const dates: string[] = [];

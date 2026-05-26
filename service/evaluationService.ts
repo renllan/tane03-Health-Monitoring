@@ -4,6 +4,7 @@ import { calculateBaselines, Level } from "./calculateBaselines";
 import { sendNotification } from "./sendNotification";
 import { RHRService } from "./rhr_service";
 import { StressService } from "./stress_service";
+import { EvaluationRepo } from "../repository/evaluation_repo";
 // ─── Helpers (private) ────────────────────────────────────────────────────────
 
 function getDateOffset(days: number): string {
@@ -240,7 +241,8 @@ export const EvaluationService = {
     async evaluateDayAllMetrics(
         imei: string,
         skipNotification = false,
-        promises: Promise<any>[] = []
+        promises: Promise<any>[] = [],
+        targetDate?: string  // optional YYYY-MM-DD; defaults to today
     ): Promise<{
         sleepScore: { level: Level; value: number | null };
         sleepDuration: { level: Level; value: number | null };
@@ -250,9 +252,17 @@ export const EvaluationService = {
         sleepHeartRate: { level: Level; value: number | null };
         stress: { level: Level; value: number | null };
     }> {
-        const today = getDateOffset(0);
-        const D7 = getDateOffset(-7);
-        const dates = Array.from({ length: 8 }, (_, i) => getDateOffset(i - 7)); // D-7 … D0
+        // If a specific date is given, compute offsets relative to it;
+        // otherwise fall back to the existing getDateOffset() helpers.
+        const resolveDate = (offsetDays: number): string => {
+            const base = targetDate ? new Date(targetDate) : new Date();
+            base.setDate(base.getDate() + offsetDays);
+            return base.toISOString().split("T")[0];
+        };
+
+        const today = resolveDate(0);
+        const D7 = resolveDate(-7);
+        const dates = Array.from({ length: 8 }, (_, i) => resolveDate(i - 7)); // D-7 … D0
 
         // ── 1. Single parallel batch: sleep records + HRV per day + all baselines ──
         const [sleepRecords, hrvPerDay, baselines, stressScoreResult] = await Promise.all([
@@ -385,6 +395,22 @@ export const EvaluationService = {
                 })()
                 : { level: "Invalid", value: null };
 
-        return { sleepScore, sleepDuration, rhr, rmssd, sdnn, sleepHeartRate, stress };
+        const result = { sleepScore, sleepDuration, rhr, rmssd, sdnn, sleepHeartRate, stress };
+
+        // ── 6. Persist to DynamoDB (fire-and-forget — does not block the response) ──
+        EvaluationRepo.saveEvaluation({
+            imei,
+            date: today,
+            lastUpdated: new Date().toISOString(),
+            sleepScore: result.sleepScore,
+            sleepDuration: result.sleepDuration,
+            rhr: result.rhr,
+            rmssd: { level: result.rmssd.level, value: result.rmssd.value },
+            sdnn: { level: result.sdnn.level, value: result.sdnn.value },
+            sleepHeartRate: result.sleepHeartRate,
+            stress: result.stress,
+        }).catch(err => console.error("[EvaluationService] Failed to save daily evaluation:", err));
+
+        return result;
     },
 };

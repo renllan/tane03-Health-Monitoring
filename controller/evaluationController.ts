@@ -6,10 +6,17 @@ export const evaluationController = {
 
     // GET /api/evaluate/:imei/day
     // Runs all day-level evaluators via a single optimized batch fetch
+    // Optional query param: ?date=YYYY-MM-DD (defaults to today)
     async evaluateDay(req: Request, res: Response) {
         try {
             const { imei } = req.params;
             if (!imei) return res.status(400).json({ error: "Missing required parameter: imei" });
+
+            // Validate optional date param
+            const dateParam = req.query?.date as string | undefined;
+            if (dateParam && !/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+                return res.status(400).json({ error: "Invalid date format. Use YYYY-MM-DD." });
+            }
 
             const skipNotification = req.query?.skipNotification === 'true';
             const notificationPromises: Promise<any>[] = [];
@@ -20,15 +27,17 @@ export const evaluationController = {
             }
 
             // Single call — pre-fetches all sleep data, HRV, and baselines in one batch
-            const evaluation = await EvaluationService.evaluateDayAllMetrics(imei, skipNotification, notificationPromises);
+            const evaluation = await EvaluationService.evaluateDayAllMetrics(imei, skipNotification, notificationPromises, dateParam);
 
             if (notificationPromises.length > 0) {
                 await Promise.allSettled(notificationPromises);
             }
 
+            const resolvedDate = dateParam ?? new Date().toISOString().split('T')[0];
+
             return res.status(200).json({
                 imei,
-                date: new Date().toISOString().split('T')[0],
+                date: resolvedDate,
                 evaluation
             });
         } catch (error: any) {

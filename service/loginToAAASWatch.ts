@@ -22,6 +22,7 @@ export async function loginToAAASWatch(imei: string): Promise<string> {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email: username, password }),
         });
+        console.log("Login response:", response);
 
         if (!response.ok) {
             const errorText = await response.text();
@@ -66,6 +67,7 @@ async function getDeviceUsername(imei: string) {
         throw new Error("SecretString is empty");
     }
     const secret = JSON.parse(response.SecretString);
+    console.log("secret:", secret);
     return {
         username: secret.username,
         password: secret.password,
