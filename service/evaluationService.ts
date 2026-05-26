@@ -5,6 +5,8 @@ import { sendNotification } from "./sendNotification";
 import { RHRService } from "./rhr_service";
 import { StressService } from "./stress_service";
 import { EvaluationRepo } from "../repository/evaluation_repo";
+import { AppError } from "../utils/AppError";
+
 // ─── Helpers (private) ────────────────────────────────────────────────────────
 
 function getDateOffset(days: number): string {
@@ -259,6 +261,11 @@ export const EvaluationService = {
             base.setDate(base.getDate() + offsetDays);
             return base.toISOString().split("T")[0];
         };
+
+
+        if (targetDate && new Date(targetDate).getTime() > new Date().getTime()) {
+            throw new AppError("Data is after today", 400);
+        }
 
         const today = resolveDate(0);
         const D7 = resolveDate(-7);
