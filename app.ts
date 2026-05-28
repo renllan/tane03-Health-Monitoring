@@ -15,7 +15,7 @@ if (!cognitoUserPoolId || !cognitoClientId) {
 const verifier = CognitoJwtVerifier.create({
   userPoolId: cognitoUserPoolId,
   tokenUse: 'id', // We expect the frontend to send the idToken
-  clientId: cognitoUserPoolId,
+  clientId: cognitoClientId,
 });
 
 // Authentication Middleware
