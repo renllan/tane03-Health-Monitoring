@@ -271,6 +271,18 @@ export const EvaluationService = {
         const D7 = resolveDate(-7);
         const dates = Array.from({ length: 8 }, (_, i) => resolveDate(i - 7)); // D-7 … D0
 
+        const existingEvaluation = await EvaluationRepo.getEvaluation(imei, targetDate || today);
+        if (existingEvaluation) {
+            return {
+                sleepScore: existingEvaluation.sleepScore,
+                sleepDuration: existingEvaluation.sleepDuration,
+                rhr: existingEvaluation.rhr,
+                rmssd: { metric: "RMSSD", ...existingEvaluation.rmssd }, // Add metric property
+                sdnn: { metric: "SDNN", ...existingEvaluation.sdnn },    // Add metric property
+                sleepHeartRate: existingEvaluation.sleepHeartRate,
+                stress: existingEvaluation.stress
+            };
+        }
         // ── 1. Single parallel batch: sleep records + HRV per day + all baselines ──
         const [sleepRecords, hrvPerDay, baselines, stressScoreResult] = await Promise.all([
             SleepService.getSleepData(imei, D7, today),
