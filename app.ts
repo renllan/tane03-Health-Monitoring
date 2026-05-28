@@ -3,13 +3,19 @@ import router from './router';
 import { CognitoJwtVerifier } from 'aws-jwt-verify';
 
 const app = express();
+const cognitoUserPoolId = process.env.COGNITO_USER_POOL_ID;
+const cognitoClientId = process.env.COGNITO_CLIENT_ID;
+if (!cognitoUserPoolId || !cognitoClientId) {
+  console.error('Missing required env vars: COGNITO_USER_POOL_ID and/or COGNITO_CLIENT_ID. Exiting.');
+  process.exit(1);
+}
 
 // Configure the verifier with your Cognito details
 // These match the values from your frontend configuration
 const verifier = CognitoJwtVerifier.create({
-  userPoolId: process.env.COGNITO_USER_POOL_ID || 'us-east-1_IXjvoWDSL',
+  userPoolId: cognitoUserPoolId,
   tokenUse: 'id', // We expect the frontend to send the idToken
-  clientId: process.env.COGNITO_CLIENT_ID || '4dq2eostiihinupfcaust9pr4j',
+  clientId: cognitoUserPoolId,
 });
 
 // Authentication Middleware
