@@ -37,6 +37,11 @@ const requireAuth = async (req: express.Request, res: express.Response, next: ex
 // Middleware to parse JSON bodies
 app.use(express.json());
 
+// Unprotected health check (used by benchmark preflight and load balancers)
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
+});
+
 // Main Router - Protected by requireAuth middleware
 app.use('/api', requireAuth, router);
 
