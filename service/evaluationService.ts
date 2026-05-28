@@ -24,9 +24,9 @@ function evaluateDayLevel(
     const diff = current - baseline;
     if (metric === "rhr") {
         if (diff > threshold) return "Poor";
-        if (diff < -threshold) return "Good";
+        if (baseline * 0.05 < diff || diff > baseline * 0.05) return "Good";
     } else {
-        if (diff > threshold) return "Good";
+        if (baseline * 0.05 < diff || diff > baseline * 0.05) return "Good";
         if (diff < -threshold) return "Poor";
     }
     return "Fair";
@@ -271,6 +271,18 @@ export const EvaluationService = {
         const D7 = resolveDate(-7);
         const dates = Array.from({ length: 8 }, (_, i) => resolveDate(i - 7)); // D-7 … D0
 
+        const existingEvaluation = await EvaluationRepo.getEvaluation(imei, targetDate || today);
+        if (existingEvaluation) {
+            return {
+                sleepScore: existingEvaluation.sleepScore,
+                sleepDuration: existingEvaluation.sleepDuration,
+                rhr: existingEvaluation.rhr,
+                rmssd: { metric: "RMSSD", ...existingEvaluation.rmssd }, // Add metric property
+                sdnn: { metric: "SDNN", ...existingEvaluation.sdnn },    // Add metric property
+                sleepHeartRate: existingEvaluation.sleepHeartRate,
+                stress: existingEvaluation.stress
+            };
+        }
         // ── 1. Single parallel batch: sleep records + HRV per day + all baselines ──
         const [sleepRecords, hrvPerDay, baselines, stressScoreResult] = await Promise.all([
             SleepService.getSleepData(imei, D7, today),
@@ -391,10 +403,10 @@ export const EvaluationService = {
         const stress: { level: Level; value: number | null } =
             stressScoreResult && stressScoreResult.stressScore !== null
                 ? (() => {
-                    const mappedLevel: Level = 
+                    const mappedLevel: Level =
                         stressScoreResult.stressLevel === "Low" ? "Good" :
-                        stressScoreResult.stressLevel === "Moderate" ? "Fair" :
-                        stressScoreResult.stressLevel === "High" ? "Poor" : "Invalid";
+                            stressScoreResult.stressLevel === "Moderate" ? "Fair" :
+                                stressScoreResult.stressLevel === "High" ? "Poor" : "Invalid";
                     if (!skipNotification && mappedLevel === "Poor") {
                         promises.push(sendNotification(imei, "TESTING: Your Daily Stress level is highly elevated today. Take some deep breaths and rest!"));
                     }
