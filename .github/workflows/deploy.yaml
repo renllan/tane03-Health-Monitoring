@@ -84,7 +84,9 @@ jobs:
             SCHEDULER_ROLE_ARN=${{ secrets.SCHEDULER_ROLE_ARN }},
             DAILY_EVALUATION_TABLE=${{ secrets.DAILY_EVALUATION_TABLE }},
             HEALTH_MONITORING_LAMBDA_ARN=${{ secrets.HEALTH_MONITORING_LAMBDA_ARN }},
-            USE_COGNITO=false
+            USE_COGNITO=false,
+            COGNITO_USER_POOL_ID=${{ secrets.COGNITO_USER_POOL_ID }},
+            COGNITO_CLIENT_ID=${{ secrets.COGNITO_CLIENT_ID }}
           }"
 
       
