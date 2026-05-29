@@ -271,8 +271,12 @@ export const EvaluationService = {
         const D7 = resolveDate(-7);
         const dates = Array.from({ length: 8 }, (_, i) => resolveDate(i - 7)); // D-7 … D0
 
+        console.log(`[EvaluationService] evaluateDayAllMetrics called. IMEI: ${imei}, Target Date: ${today}, Date Range (7-day history): ${D7} to ${today}`);
+
+        console.log(`[EvaluationService] Checking DB for existing evaluation record for IMEI: ${imei}, Date: ${today}`);
         const existingEvaluation = await EvaluationRepo.getEvaluation(imei, targetDate || today);
         if (existingEvaluation) {
+            console.log(`[EvaluationService] Cache hit! Returning pre-existing evaluation record from DB:`, JSON.stringify(existingEvaluation, null, 2));
             return {
                 sleepScore: existingEvaluation.sleepScore,
                 sleepDuration: existingEvaluation.sleepDuration,
@@ -283,6 +287,9 @@ export const EvaluationService = {
                 stress: existingEvaluation.stress
             };
         }
+
+        console.log(`[EvaluationService] Cache miss. Starting parallel batch fetch for sleep records, HRV profiles, baselines, and composite stress score.`);
+        
         // ── 1. Single parallel batch: sleep records + HRV per day + all baselines ──
         const [sleepRecords, hrvPerDay, baselines, stressScoreResult] = await Promise.all([
             SleepService.getSleepData(imei, D7, today),
@@ -311,6 +318,10 @@ export const EvaluationService = {
         ]);
 
         const [blSleepScore, blSleepDuration, blRHR, blRMSSD, blSDNN, blSleepAvgHR, blStress] = baselines;
+
+        console.log(`[EvaluationService] Batch fetch complete.`);
+        console.log(`[EvaluationService] Sleep records found: ${sleepRecords?.length || 0}`);
+        console.log(`[EvaluationService] Baselines loaded successfully. SleepScore Status: ${blSleepScore.status}, SleepDuration Status: ${blSleepDuration.status}, RHR Status: ${blRHR.status}, RMSSD Status: ${blRMSSD.status}`);
 
         // ── 2. Derive all averages from the pre-fetched sleep records ─────────────
         const validSleep = sleepRecords.filter(r => (r.minutes ?? 0) >= 60);
@@ -344,12 +355,18 @@ export const EvaluationService = {
         const avgRMSSD = rmssdDailyMaxes.length ? rmssdDailyMaxes.reduce((a, b) => a + b, 0) / rmssdDailyMaxes.length : null;
         const avgSDNN = sdnnDailyMaxes.length ? sdnnDailyMaxes.reduce((a, b) => a + b, 0) / sdnnDailyMaxes.length : null;
 
+        console.log(`[EvaluationService] Averages calculated - AvgSleepScore: ${avgSleepScore}, AvgSleepDuration: ${avgSleepDuration}, AvgRHR: ${avgRHR}, AvgRMSSD: ${avgRMSSD}, AvgSDNN: ${avgSDNN}`);
+
         // ── 4. Evaluate each metric ────────────────────────────────────────────────
         const sleepScore: { level: Level; value: number | null } =
             avgSleepScore && blSleepScore.status === "Success" && blSleepScore.baseline
                 ? (() => {
                     const level = evaluateDayLevel(avgSleepScore, blSleepScore.baseline, 10, "other");
-                    if (!skipNotification) promises.push(sendNotification(imei, "TESTING: Your Sleep Score dropped significantly today. Try to rest!"));
+                    console.log(`[EvaluationService] Sleep Score evaluated: Level = ${level}, Value = ${avgSleepScore} (Baseline: ${blSleepScore.baseline})`);
+                    if (!skipNotification) {
+                        console.log(`[EvaluationService] Queueing Sleep Score notification...`);
+                        promises.push(sendNotification(imei, "TESTING: Your Sleep Score dropped significantly today. Try to rest!"));
+                    }
                     return { level, value: avgSleepScore };
                 })()
                 : { level: "Invalid", value: null };
@@ -358,7 +375,11 @@ export const EvaluationService = {
             avgSleepDuration && blSleepDuration.status === "Success" && blSleepDuration.durationBaseline
                 ? (() => {
                     const level = evaluateDayLevel(avgSleepDuration, blSleepDuration.durationBaseline, blSleepDuration.durationBaseline * 0.3, "other");
-                    if (!skipNotification) promises.push(sendNotification(imei, "TESTING: Your sleep duration was unusually short. Consider an early bedtime!"));
+                    console.log(`[EvaluationService] Sleep Duration evaluated: Level = ${level}, Value = ${avgSleepDuration} (Baseline: ${blSleepDuration.durationBaseline})`);
+                    if (!skipNotification) {
+                        console.log(`[EvaluationService] Queueing Sleep Duration notification...`);
+                        promises.push(sendNotification(imei, "TESTING: Your sleep duration was unusually short. Consider an early bedtime!"));
+                    }
                     return { level, value: avgSleepDuration };
                 })()
                 : { level: "Invalid", value: null };
@@ -367,7 +388,11 @@ export const EvaluationService = {
             avgRHR && blRHR.status === "Success" && blRHR.baseline
                 ? (() => {
                     const level = evaluateDayLevel(avgRHR, blRHR.baseline, blRHR.baseline * 0.3, "rhr");
-                    if (!skipNotification) promises.push(sendNotification(imei, "TESTING: Your Resting Heart Rate is elevated. Your body might be under stress or recovering."));
+                    console.log(`[EvaluationService] RHR evaluated: Level = ${level}, Value = ${avgRHR} (Baseline: ${blRHR.baseline})`);
+                    if (!skipNotification) {
+                        console.log(`[EvaluationService] Queueing RHR notification...`);
+                        promises.push(sendNotification(imei, "TESTING: Your Resting Heart Rate is elevated. Your body might be under stress or recovering."));
+                    }
                     return { level, value: avgRHR };
                 })()
                 : { level: "Invalid", value: null };
@@ -376,7 +401,11 @@ export const EvaluationService = {
             avgRMSSD && blRMSSD.status === "Success" && blRMSSD.baseline
                 ? (() => {
                     const level = evaluateDayLevel(avgRMSSD, blRMSSD.baseline, blRMSSD.baseline * 0.3, "other");
-                    if (!skipNotification) promises.push(sendNotification(imei, "TESTING: Your HRV (RMSSD) is low today, indicating high stress or poor recovery."));
+                    console.log(`[EvaluationService] RMSSD evaluated: Level = ${level}, Value = ${avgRMSSD} (Baseline: ${blRMSSD.baseline})`);
+                    if (!skipNotification) {
+                        console.log(`[EvaluationService] Queueing RMSSD notification...`);
+                        promises.push(sendNotification(imei, "TESTING: Your HRV (RMSSD) is low today, indicating high stress or poor recovery."));
+                    }
                     return { metric: "RMSSD" as const, level, value: avgRMSSD };
                 })()
                 : { metric: "RMSSD" as const, level: "Invalid", value: null };
@@ -385,7 +414,11 @@ export const EvaluationService = {
             avgSDNN && blSDNN.status === "Success" && blSDNN.baseline
                 ? (() => {
                     const level = evaluateDayLevel(avgSDNN, blSDNN.baseline, blSDNN.baseline * 0.3, "other");
-                    if (!skipNotification) promises.push(sendNotification(imei, "TESTING: Your HRV (SDNN) is low today, indicating high stress or poor recovery."));
+                    console.log(`[EvaluationService] SDNN evaluated: Level = ${level}, Value = ${avgSDNN} (Baseline: ${blSDNN.baseline})`);
+                    if (!skipNotification) {
+                        console.log(`[EvaluationService] Queueing SDNN notification...`);
+                        promises.push(sendNotification(imei, "TESTING: Your HRV (SDNN) is low today, indicating high stress or poor recovery."));
+                    }
                     return { metric: "SDNN" as const, level, value: avgSDNN };
                 })()
                 : { metric: "SDNN" as const, level: "Invalid", value: null };
@@ -394,7 +427,11 @@ export const EvaluationService = {
             avgSleepHR && blSleepAvgHR.status === "Success" && blSleepAvgHR.baseline
                 ? (() => {
                     const level = evaluateDayLevel(avgSleepHR, blSleepAvgHR.baseline, blSleepAvgHR.baseline * 0.3, "rhr");
-                    if (!skipNotification) promises.push(sendNotification(imei, "TESTING: Your Average Sleep Heart Rate is elevated. Your body might be under stress or recovering."));
+                    console.log(`[EvaluationService] Sleep Heart Rate evaluated: Level = ${level}, Value = ${avgSleepHR} (Baseline: ${blSleepAvgHR.baseline})`);
+                    if (!skipNotification) {
+                        console.log(`[EvaluationService] Queueing Sleep Heart Rate notification...`);
+                        promises.push(sendNotification(imei, "TESTING: Your Average Sleep Heart Rate is elevated. Your body might be under stress or recovering."));
+                    }
                     return { level, value: avgSleepHR };
                 })()
                 : { level: "Invalid", value: null };
@@ -407,7 +444,9 @@ export const EvaluationService = {
                         stressScoreResult.stressLevel === "Low" ? "Good" :
                             stressScoreResult.stressLevel === "Moderate" ? "Fair" :
                                 stressScoreResult.stressLevel === "High" ? "Poor" : "Invalid";
+                    console.log(`[EvaluationService] Composite Daily Stress evaluated: Level = ${mappedLevel}, Value = ${stressScoreResult.stressScore}`);
                     if (!skipNotification && mappedLevel === "Poor") {
+                        console.log(`[EvaluationService] Queueing Stress alert notification...`);
                         promises.push(sendNotification(imei, "TESTING: Your Daily Stress level is highly elevated today. Take some deep breaths and rest!"));
                     }
                     return { level: mappedLevel, value: stressScoreResult.stressScore };
@@ -417,6 +456,7 @@ export const EvaluationService = {
         const result = { sleepScore, sleepDuration, rhr, rmssd, sdnn, sleepHeartRate, stress };
 
         // ── 6. Persist to DynamoDB (fire-and-forget — does not block the response) ──
+        console.log(`[EvaluationService] Saving newly computed daily evaluation results to DynamoDB for date: ${today}`);
         EvaluationRepo.saveEvaluation({
             imei,
             date: today,
@@ -428,6 +468,8 @@ export const EvaluationService = {
             sdnn: { level: result.sdnn.level, value: result.sdnn.value },
             sleepHeartRate: result.sleepHeartRate,
             stress: result.stress,
+        }).then(() => {
+            console.log(`[EvaluationService] Successfully saved evaluation records to DynamoDB.`);
         }).catch(err => console.error("[EvaluationService] Failed to save daily evaluation:", err));
 
         return result;
