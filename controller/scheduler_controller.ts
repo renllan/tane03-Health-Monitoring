@@ -56,4 +56,24 @@ export class SchedulerController {
             res.status(500).json({ error: "Internal server error" });
         }
     };
+
+    getSchedule = async (req: Request, res: Response): Promise<void> => {
+        try {
+            const { imei } = req.params;
+
+            if (!imei) {
+                res.status(400).json({ error: "Missing required fields" });
+                return;
+            }
+
+            const schedule = await this.schedulerService.getSchedule(imei);
+
+            res.status(200).json({ schedule });
+            console.log("Schedule retrieved successfully");
+        } catch (error) {
+            console.log(error);
+            console.error("Error retrieving schedule:", error);
+            res.status(500).json({ error: "Internal server error" });
+        }
+    };
 }

@@ -6,6 +6,6 @@ const schedulerController = new SchedulerController();
 
 // Define the route to schedule an evaluation
 router.post('/schedule/create/:imei', schedulerController.scheduleEvaluation);
-router.post('/schedule/delete/:imei', schedulerController.deleteSchedule);
-
+router.delete('/schedule/delete/:imei', schedulerController.deleteSchedule);
+router.get('/schedule/get/:imei', schedulerController.getSchedule);
 export default router;

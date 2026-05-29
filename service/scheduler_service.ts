@@ -44,4 +44,9 @@ export class SchedulerService {
         const scheduleName = `HealthCheck-User-${imei}`;
         await this.schedulerRepo.deleteSchedule(scheduleName);
     }
+
+    async getSchedule(imei: string): Promise<any> {
+        const scheduleName = `HealthCheck-User-${imei}`;
+        return await this.schedulerRepo.getSchedule(scheduleName);
+    }
 }

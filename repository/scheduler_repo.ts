@@ -1,4 +1,4 @@
-import { SchedulerClient, CreateScheduleCommand, UpdateScheduleCommand, DeleteScheduleCommand } from "@aws-sdk/client-scheduler";
+import { SchedulerClient, CreateScheduleCommand, UpdateScheduleCommand, DeleteScheduleCommand, GetScheduleCommand } from "@aws-sdk/client-scheduler";
 
 export class SchedulerRepo {
     private schedulerClient: SchedulerClient;
@@ -16,5 +16,10 @@ export class SchedulerRepo {
     }
     async deleteSchedule(scheduleName: string): Promise<void> {
         await this.schedulerClient.send(new DeleteScheduleCommand({ Name: scheduleName }));
+    }
+
+    async getSchedule(scheduleName: string): Promise<any> {
+        const response = await this.schedulerClient.send(new GetScheduleCommand({ Name: scheduleName }));
+        return response;
     }
 }
