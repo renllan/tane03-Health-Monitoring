@@ -94,6 +94,13 @@ export function clearBaselineMemCache() {
 
 export const calculateBaselines = {
 
+    async preloadSleepData(imei: string): Promise<void> {
+        console.log(`[calculateBaselines] Preloading 60-day sleep data for imei ${imei}`);
+        const startDate = getDateOffset(-60);
+        const endDate = getDateOffset(-1);
+        await SleepService.getSleepData(imei, startDate, endDate);
+    },
+
     async _getOrCalculate(
         imei: string,
         type: BaselineType,
@@ -360,14 +367,25 @@ export const calculateBaselines = {
      */
     async calculateRMSSDBaseline(imei: string): Promise<BaselineResult> {
         console.log("calculating rmssd baseline for imei", imei)
+        const startDate = getDateOffset(-60);
+        const endDate = getDateOffset(-1);
 
         const dates: string[] = [];
         for (let i = -60; i <= -1; i++) {
             dates.push(getDateOffset(i));
         }
 
-        const results: (HRVData | null)[] = await Promise.all(
-            dates.map(date => HRVService.calculateRMSSD(imei, date).catch(() => null))
+        // 1. Query the existing HRV data in bulk for the range (returns date -> HRVData map)
+        const existingMap = await HRV_repo.queryHRVRange(imei, HRVType.RMSSD, startDate, endDate);
+
+        // 2. Identify missing dates and compute them
+        const results = await Promise.all(
+            dates.map(async (date) => {
+                if (existingMap[date]) {
+                    return existingMap[date];
+                }
+                return HRVService.calculateRMSSD(imei, date).catch(() => null);
+            })
         );
 
         // Sort results chronologically by timestamp (date) before extracting daily values
@@ -401,14 +419,25 @@ export const calculateBaselines = {
      */
     async calculateSDNNBaseline(imei: string): Promise<BaselineResult> {
         console.log("calculating sdnn baseline for imei", imei)
+        const startDate = getDateOffset(-60);
+        const endDate = getDateOffset(-1);
 
         const dates: string[] = [];
         for (let i = -60; i <= -1; i++) {
             dates.push(getDateOffset(i));
         }
 
-        const results: (HRVData | null)[] = await Promise.all(
-            dates.map(date => HRVService.calculateSDNN(imei, date).catch(() => null))
+        // 1. Query the existing HRV data in bulk for the range (returns date -> HRVData map)
+        const existingMap = await HRV_repo.queryHRVRange(imei, HRVType.SDNN, startDate, endDate);
+
+        // 2. Identify missing dates and compute them
+        const results = await Promise.all(
+            dates.map(async (date) => {
+                if (existingMap[date]) {
+                    return existingMap[date];
+                }
+                return HRVService.calculateSDNN(imei, date).catch(() => null);
+            })
         );
 
         // Sort results chronologically by timestamp (date) before extracting daily values

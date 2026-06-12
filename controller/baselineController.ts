@@ -60,6 +60,9 @@ export const baselineController = {
                 return res.status(400).json({ error: "Missing required parameter: imei" });
             }
 
+            // Preload 60-day sleep data first to populate DB cache and avoid concurrent Lambda thundering herds
+            await calculateBaselines.preloadSleepData(imei);
+
             // Execute all baseline calculations concurrently
             const [sleepDuration, sleepScore, rhr, rmssd, sdnn, sleepAvgHR, stress] = await Promise.all([
                 calculateBaselines.getSleepDurationBaseline(imei),

@@ -71,13 +71,18 @@ async function calculateHRV(imei: string, date: string) {
 
 // Backward-compatible individual accessors
 async function calculateRMSSD(imei: string, date: string) {
+    console.log(`[HRVService] calculateRMSSD called for IMEI: ${imei}, Date: ${date}`);
     const existing = await HRV_repo.getHRV(imei, date, HRVType.RMSSD);
-    if (existing) return existing;
+    if (existing) {
+        console.log(`[HRVService] Cache hit in HRV_repo for RMSSD. IMEI: ${imei}, Date: ${date}`);
+        return existing;
+    }
 
+    console.log(`[HRVService] Cache miss in HRV_repo for RMSSD. IMEI: ${imei}, Date: ${date}. Fetching sleep records.`);
     const sleep: SleepData[] = await SleepService.getSleepData(imei, date, date);
 
     if (!sleep.length || !sleep[0]) {
-        console.warn(`[calculateRMSSD] No sleep record found for ${imei} on ${date}`);
+        console.warn(`[HRVService] [calculateRMSSD] No sleep record found for ${imei} on ${date}`);
         return null;
     }
 
@@ -85,6 +90,7 @@ async function calculateRMSSD(imei: string, date: string) {
     const segments0: SleepSegment[] = Array.isArray(rawSegs0) ? rawSegs0 : JSON.parse(rawSegs0 as string);
 
     const hrData = segments0.flatMap(seg => seg.hrList ?? []);
+    console.log(`[HRVService] Flat mapped ${hrData.length} heart rate records from sleep segments.`);
 
     const hourlyGroups: Record<number, HeartRateData[]> = {};
     hrData.forEach(item => {
@@ -104,6 +110,7 @@ async function calculateRMSSD(imei: string, date: string) {
     });
 
     if (!mappedValues.length) {
+        console.warn(`[HRVService] No hourly groups resolved for RMSSD computation. IMEI: ${imei}, Date: ${date}`);
         return null;
     }
 
@@ -113,23 +120,31 @@ async function calculateRMSSD(imei: string, date: string) {
         type: HRVType.RMSSD,
         values: mappedValues
     };
+    console.log(`[HRVService] Successfully computed RMSSD for ${mappedValues.length} hourly intervals. Saving to DB.`);
     await HRV_repo.saveHRV(result);
     return result;
 }
 
 async function calculateSDNN(imei: string, date: string) {
+    console.log(`[HRVService] calculateSDNN called for IMEI: ${imei}, Date: ${date}`);
     const existing = await HRV_repo.getHRV(imei, date, HRVType.SDNN);
-    if (existing) return existing;
+    if (existing) {
+        console.log(`[HRVService] Cache hit in HRV_repo for SDNN. IMEI: ${imei}, Date: ${date}`);
+        return existing;
+    }
 
+    console.log(`[HRVService] Cache miss in HRV_repo for SDNN. IMEI: ${imei}, Date: ${date}. Fetching sleep records.`);
     const sleep: SleepData[] = await SleepService.getSleepData(imei, date, date);
     if (!sleep.length || !sleep[0]) {
-        console.warn(`[calculateSDNN] No sleep record found for ${imei} on ${date}`);
+        console.warn(`[HRVService] [calculateSDNN] No sleep record found for ${imei} on ${date}`);
         return null;
     }
 
     const rawSegs1 = sleep[0].segments;
     const segments1: SleepSegment[] = Array.isArray(rawSegs1) ? rawSegs1 : JSON.parse(rawSegs1 as string);
     const hrData = segments1.flatMap(seg => seg.hrList);
+    console.log(`[HRVService] Flat mapped ${hrData.length} heart rate records from sleep segments for SDNN.`);
+
     //split this by the hour
     const hourlyGroups: Record<number, HeartRateData[]> = {};
 
@@ -159,6 +174,7 @@ async function calculateSDNN(imei: string, date: string) {
     });
 
     if (!mappedValues.length) {
+        console.warn(`[HRVService] No hourly groups resolved for SDNN computation. IMEI: ${imei}, Date: ${date}`);
         return null;
     }
 
@@ -168,6 +184,7 @@ async function calculateSDNN(imei: string, date: string) {
         type: HRVType.SDNN,
         values: mappedValues
     };
+    console.log(`[HRVService] Successfully computed SDNN for ${mappedValues.length} hourly intervals. Saving to DB.`);
     await HRV_repo.saveHRV(result);
     return result;
 }
