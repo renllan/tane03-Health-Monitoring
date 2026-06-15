@@ -25,8 +25,8 @@ export class DeviceTagService {
      * @param tag 
      * @param color 
      */
-    async addEntry(imei: string, tag: string, color?: string): Promise<void> {
-        return TagRepo.addEntry(imei, tag, color);
+    async addEntry(imei: string, tag: string, color: string, groupId: string): Promise<void> {
+        return TagRepo.addEntry(imei, tag, color, groupId);
     }
     /**
      * Delete all entries for a specific tag
@@ -42,5 +42,9 @@ export class DeviceTagService {
      */
     async deleteTagFromDevice(imei: string, tag: string): Promise<void> {
         return TagRepo.deleteTagFromDevice(imei, tag);
+    }
+
+    async getByGroupId(group_id: string): Promise<DeviceTag[]> {
+        return TagRepo.getByGroupId(group_id);
     }
 }
