@@ -11,7 +11,7 @@ import {
 const client = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(client);
 
-const TABLE_NAME = process.env.TanE03_DeviceTags || 'TanE03_DeviceTags';
+const TABLE_NAME = process.env.TanE03_DeviceTags || 'TanE03-DeviceTags';
 const INDEX_NAME = "TagToImeiIndex";
 
 /**
@@ -57,14 +57,15 @@ export const TagRepo = {
    * 3. addEntry
    * Adds/binds a tag to a device (IMEI) along with an optional color.
    */
-  async addEntry(imei: string, tag: string, color?: string): Promise<void> {
-    const validatedColor = parseHexColor(color ?? "#E3F2FD");
+  async addEntry(imei: string, tag: string, color: string, groupId: string): Promise<void> {
+    const validatedColor = parseHexColor(color);
     const command = new PutCommand({
       TableName: TABLE_NAME,
       Item: {
         imei,
         tag,
         color: validatedColor,
+        groupId,
       },
     });
 
@@ -112,6 +113,7 @@ export const TagRepo = {
     const command = new QueryCommand({
       TableName: TABLE_NAME,
       KeyConditionExpression: "tag = :tag",
+      IndexName: INDEX_NAME,
       ExpressionAttributeValues: {
         ":tag": tag,
       },
@@ -119,6 +121,20 @@ export const TagRepo = {
     const response = await docClient.send(command);
     const items = (response.Items as DeviceTag[]) || [];
     return items.length > 0 ? items[0].color : parseHexColor("#E3F2FD"); // return the color of the first entry
+  },
+
+  async getByGroupId(groupId: string): Promise<DeviceTag[]> {
+    const command = new QueryCommand({
+      TableName: TABLE_NAME,
+      IndexName: "byGroupId",              // ← add this
+      KeyConditionExpression: "groupId = :gid",  // ← camelCase
+      ExpressionAttributeValues: {
+        ":gid": groupId,
+      },
+    });
+    const response = await docClient.send(command);
+    return (response.Items as DeviceTag[]) || [];
   }
+
 };
 

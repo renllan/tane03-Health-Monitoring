@@ -4,10 +4,10 @@ import { DeviceTagController } from '../controller/deviceTagController';
 const router = Router();
 const deviceTagController = new DeviceTagController();
 
-router.get('/:imei', deviceTagController.getTagsByImei);
-router.get('/query/:tag', deviceTagController.queryByTag);
-router.post('/add', deviceTagController.addEntry);
-router.delete('/delete/:tag', deviceTagController.deleteTag);
-router.delete('/delete/:imei/:tag', deviceTagController.deleteTagFromDevice);
+router.get('/:imei', (req, res) => { deviceTagController.getTagsByImei(req, res); });
+router.get('/query/:tag', (req, res) => { deviceTagController.queryByTag(req, res); });
+router.post('/add', (req, res) => { deviceTagController.addEntry(req, res); });
+router.delete('/delete/:tag', (req, res) => { deviceTagController.deleteTag(req, res); });
+router.delete('/delete/:imei/:tag', (req, res) => { deviceTagController.deleteTagFromDevice(req, res); });
 
 export default router;

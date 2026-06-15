@@ -36,7 +36,7 @@ export class DeviceTagController {
     }
     addEntry = async (req: Request, res: Response): Promise<void> => {
         try {
-            const { imei, tag, color } = req.body;
+            const { imei, tag, color, group_id } = req.body;
             if (!imei || imei.trim() === '') {
                 res.status(400).json({ message: "Missing required field: imei" });
                 return;
@@ -45,7 +45,7 @@ export class DeviceTagController {
                 res.status(400).json({ message: "Missing required field: tag" });
                 return;
             }
-            await this.deviceTagService.addEntry(imei, tag, color);
+            await this.deviceTagService.addEntry(imei, tag, color, group_id);
             res.status(200).json({ message: "Entry added successfully" });
         } catch (error) {
             console.error("Error in addEntry:", error);
@@ -82,6 +82,21 @@ export class DeviceTagController {
         } catch (error) {
             console.error("Error in deleteTagFromDevice:", error);
             res.status(500).json({ message: "Internal server error while removing tag from device" });
+        }
+    }
+
+    getByGroupId = async (req: Request, res: Response): Promise<void> => {
+        try {
+            const { group_id } = req.params;
+            if (!group_id || group_id.trim() === '') {
+                res.status(400).json({ message: "Missing required parameter: group_id" });
+                return;
+            }
+            const deviceTags: DeviceTag[] = await this.deviceTagService.getByGroupId(group_id);
+            res.status(200).json(deviceTags);
+        } catch (error) {
+            console.error("Error in getByGroupId:", error);
+            res.status(500).json({ message: "Internal server error while getting devices" });
         }
     }
 }
