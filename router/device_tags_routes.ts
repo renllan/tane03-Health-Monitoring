@@ -10,5 +10,6 @@ router.get('/group/:group_id', (req, res) => { deviceTagController.getByGroupId(
 router.post('/add', (req, res) => { deviceTagController.addEntry(req, res); });
 router.delete('/delete/:tag', (req, res) => { deviceTagController.deleteTag(req, res); });
 router.delete('/delete/:imei/:tag', (req, res) => { deviceTagController.deleteTagFromDevice(req, res); });
-router.delete('delete/tag/:group_id/:tag', (req, res) => { deviceTagController.deleteTagFromGroup(req, res); });
+router.delete('/delete/group_tag/:group_id/:tag', (req, res) => { deviceTagController.deleteTagFromGroup(req, res); });
+
 export default router;
