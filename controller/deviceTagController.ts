@@ -99,4 +99,23 @@ export class DeviceTagController {
             res.status(500).json({ message: "Internal server error while getting devices" });
         }
     }
+
+    deleteTagFromGroup = async (req: Request, res: Response): Promise<void> => {
+        try {
+            const { group_id, tag } = req.params;
+            if (!group_id || group_id.trim() === '') {
+                res.status(400).json({ message: "Missing required parameter: group_id" });
+                return;
+            }
+            if (!tag || tag.trim() === '') {
+                res.status(400).json({ message: "Missing required parameter: tag" });
+                return;
+            }
+            await this.deviceTagService.deleteTagFromGroup(group_id, tag);
+            res.status(200).json({ message: "Tag removed from group successfully" });
+        } catch (error) {
+            console.error("Error in deleteTagFromGroup:", error);
+            res.status(500).json({ message: "Internal server error while removing tag from group" });
+        }
+    }
 }

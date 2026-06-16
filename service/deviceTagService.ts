@@ -47,4 +47,7 @@ export class DeviceTagService {
     async getByGroupId(group_id: string): Promise<DeviceTag[]> {
         return TagRepo.getByGroupId(group_id);
     }
+    async deleteTagFromGroup(group_id: string, tag: string): Promise<void> {
+        return TagRepo.deleteTagFromGroup(group_id, tag);
+    }
 }

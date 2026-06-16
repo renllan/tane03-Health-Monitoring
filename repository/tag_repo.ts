@@ -4,7 +4,8 @@ import {
   DynamoDBDocumentClient,
   QueryCommand,
   PutCommand,
-  DeleteCommand
+  DeleteCommand,
+  BatchWriteCommand,
 } from "@aws-sdk/lib-dynamodb";
 
 // Initialize the DynamoDB Client
@@ -122,7 +123,7 @@ export const TagRepo = {
     const items = (response.Items as DeviceTag[]) || [];
     return items.length > 0 ? items[0].color : parseHexColor("#E3F2FD"); // return the color of the first entry
   },
-
+  //get all entry by groupID
   async getByGroupId(groupId: string): Promise<DeviceTag[]> {
     const command = new QueryCommand({
       TableName: TABLE_NAME,
@@ -134,7 +135,44 @@ export const TagRepo = {
     });
     const response = await docClient.send(command);
     return (response.Items as DeviceTag[]) || [];
-  }
+  },
+
+  async deleteTagFromGroup(groupId: string, tag: string): Promise<void> {
+    // Step 1: Query only items matching groupId + tag (filter server-side)
+    const targets: { imei: string; tag: string }[] = [];
+    let lastKey: Record<string, any> | undefined;
+
+    do {
+      const result = await docClient.send(new QueryCommand({
+        TableName: TABLE_NAME,
+        IndexName: 'byGroupId',
+        KeyConditionExpression: 'groupId = :g',
+        FilterExpression: 'tag = :t',
+        ExpressionAttributeValues: {
+          ':g': groupId,
+          ':t': tag,
+        },
+        ExclusiveStartKey: lastKey,
+      }));
+
+      targets.push(...(result.Items ?? []) as { imei: string; tag: string }[]);
+      lastKey = result.LastEvaluatedKey;
+    } while (lastKey);
+
+    // Step 2: Batch delete in chunks of 25
+    for (let i = 0; i < targets.length; i += 25) {
+      const chunk = targets.slice(i, i + 25);
+      await docClient.send(new BatchWriteCommand({
+        RequestItems: {
+          [TABLE_NAME]: chunk.map(entry => ({
+            DeleteRequest: {
+              Key: { imei: entry.imei, tag: entry.tag },
+            },
+          })),
+        },
+      }));
+    }
+  },
 
 };
 
