@@ -19,4 +19,5 @@ export type DeviceTag = {
     imei: string;
     tag: string;
     color: HexColor;
+    groupID: string;
 }
