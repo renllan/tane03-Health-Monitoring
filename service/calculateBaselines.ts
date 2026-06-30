@@ -232,7 +232,7 @@ export const calculateBaselines = {
         // D-67 gives us enough look-back so that even the earliest of the 60
         // target dates (D-60) can still form a full 7-day trailing window.
         const bulkStart = getDateOffset(-60);
-        const bulkEnd   = getDateOffset(-1);
+        const bulkEnd = getDateOffset(-1);
 
         const dates: string[] = [];
         for (let i = -60; i <= -1; i++) {
@@ -266,14 +266,14 @@ export const calculateBaselines = {
 
         // ── 2. Build the shared preloaded context ──────────────────────────────
         const preloaded: PreloadedStressData = {
-            sleepData:   allSleepData,
-            sleepAvgHR:  allSleepAvgHR,
-            rmssd:       rmssdMap,
+            sleepData: allSleepData,
+            sleepAvgHR: allSleepAvgHR,
+            rmssd: rmssdMap,
             baselines: {
-                rmssd:         rmssdBaseline,
-                rhr:           rhrBaseline,
-                sleepAvgHR:    sleepAvgHRBaseline,
-                sleepScore:    sleepScoreBaseline,
+                rmssd: rmssdBaseline,
+                rhr: rhrBaseline,
+                sleepAvgHR: sleepAvgHRBaseline,
+                sleepScore: sleepScoreBaseline,
                 sleepDuration: sleepDurationBaseline,
             },
         };
@@ -394,7 +394,7 @@ export const calculateBaselines = {
             .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
             .map(res => {
                 const vals = res.values.map(v => v.value).filter(v => v > 0);
-                return vals.length > 0 ? Math.max(...vals) : null;
+                return vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
             })
             .filter((v): v is number => v !== null && v > 0);
 
@@ -446,7 +446,7 @@ export const calculateBaselines = {
             .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
             .map(res => {
                 const vals = res.values.map(v => v.value).filter(v => v > 0);
-                return vals.length > 0 ? Math.max(...vals) : null;
+                return vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
             })
             .filter((v): v is number => v !== null && v > 0);
 

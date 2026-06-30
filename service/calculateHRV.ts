@@ -143,8 +143,6 @@ async function calculateSDNN(imei: string, date: string) {
     const rawSegs1 = sleep[0].segments;
     const segments1: SleepSegment[] = Array.isArray(rawSegs1) ? rawSegs1 : JSON.parse(rawSegs1 as string);
     const hrData = segments1.flatMap(seg => seg.hrList);
-    console.log(`[HRVService] Flat mapped ${hrData.length} heart rate records from sleep segments for SDNN.`);
-
     //split this by the hour
     const hourlyGroups: Record<number, HeartRateData[]> = {};
 
