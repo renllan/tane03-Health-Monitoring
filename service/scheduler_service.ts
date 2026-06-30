@@ -33,7 +33,6 @@ export class SchedulerService {
         };
 
         try {
-            console.log(`[SchedulerService] Attempting to create schedule: ${scheduleName}`);
             await this.schedulerRepo.createSchedule(scheduleConfig);
             console.log(`[SchedulerService] Successfully created schedule: ${scheduleName}`);
         } catch (err: any) {
