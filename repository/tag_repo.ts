@@ -108,6 +108,7 @@ export const TagRepo = {
     });
 
     await docClient.send(command);
+    await TagRepo.deleteTagFromGroup(imei, tag);
   },
 
   async getTagColor(tag: string): Promise<string> {
@@ -171,6 +172,46 @@ export const TagRepo = {
           })),
         },
       }));
+    }
+  },
+
+  async updateColor(groupId: string, tag: string, color: string): Promise<void> {
+    const validatedColor = parseHexColor(color);
+    
+    // Step 1: Query all items matching groupId + tag
+    const targets: { imei: string; tag: string }[] = [];
+    let lastKey: Record<string, any> | undefined;
+
+    do {
+      const result = await docClient.send(new QueryCommand({
+        TableName: TABLE_NAME,
+        IndexName: 'byGroupId',
+        KeyConditionExpression: 'groupId = :g',
+        FilterExpression: 'tag = :t',
+        ExpressionAttributeValues: {
+          ':g': groupId,
+          ':t': tag,
+        },
+        ExclusiveStartKey: lastKey,
+      }));
+
+      targets.push(...(result.Items ?? []) as { imei: string; tag: string }[]);
+      lastKey = result.LastEvaluatedKey;
+    } while (lastKey);
+
+    const finalTargets = targets.length > 0 ? targets : [{ imei: '__definition__', tag }];
+
+    for (const target of finalTargets) {
+      const command = new PutCommand({
+        TableName: TABLE_NAME,
+        Item: {
+          imei: target.imei,
+          tag: target.tag,
+          color: validatedColor,
+          groupId: groupId,
+        },
+      });
+      await docClient.send(command);
     }
   },
 
