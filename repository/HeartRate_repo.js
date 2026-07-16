@@ -1,7 +1,7 @@
 const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const { DynamoDBDocumentClient, GetCommand, QueryCommand } = require("@aws-sdk/lib-dynamodb");
 // Setup the DynamoDB Client
-const client = new DynamoDBClient({ region: process.env.US_REGION });
+const client = new DynamoDBClient({ region: process.env.US_REGION || "us-east-1" });
 const docClient = DynamoDBDocumentClient.from(client);
 
 export const HeartRateRepo = {
@@ -22,7 +22,7 @@ export const HeartRateRepo = {
                 ExpressionAttributeValues: {
                     ":deviceId": imei,
                     // Prepend the type so it correctly hits the sort key
-                    ":startDate": `heartrate#${twentyEightDaysAgo.toISOString()}`,
+                    ":startDate": `heartRate#${twentyEightDaysAgo.toISOString()}`,
                 }
             })
         );
@@ -73,7 +73,7 @@ export const HeartRateRepo = {
                 },
                 ExpressionAttributeValues: {
                     ":deviceId": imei,
-                    ":startDate": `heartrate#${twentyFourHoursAgo.toISOString()}`,
+                    ":startDate": `heartRate#${twentyFourHoursAgo.toISOString()}`,
                 }
             })
         );
@@ -99,8 +99,8 @@ export const HeartRateRepo = {
                 },
                 ExpressionAttributeValues: {
                     ":deviceId": imei,
-                    ":startDate": `${thirtyMinutesAgo.toISOString()}#heartrate`,
-                    ":endDate": `${thirtyMinutesLater.toISOString()}#heartrate`,
+                    ":startDate": `${thirtyMinutesAgo.toISOString()}#heartRate`,
+                    ":endDate": `${thirtyMinutesLater.toISOString()}#heartRate`,
                 }
             })
         );
@@ -111,8 +111,18 @@ export const HeartRateRepo = {
     // Returns items with { timestamp, value } — used by the HRV backfill service
     // to find which hourly windows need HRV calculated.
     async getHeartRateByDateRange(imei, startISO, endISO) {
+        // Safety check to ensure the environment variable isn't running as undefined
+        if (!process.env.HEALTH_DATA_TABLE) {
+            throw new Error("[HeartRateRepo] HEALTH_DATA_TABLE environment variable is not set.");
+        }
+
         const allItems = [];
         let lastKey = undefined;
+
+        // Change 'heartRate#' to 'heartrate#' (lowercase) to match the database values
+        // used in your working getLast28DaysData / getLast24HoursData queries
+        const fromKey = `heartRate#${startISO}`;
+        const toKey = `heartRate#${endISO}`;
 
         do {
             const response = await docClient.send(
@@ -120,17 +130,17 @@ export const HeartRateRepo = {
                     TableName: process.env.HEALTH_DATA_TABLE,
                     IndexName: "byDeviceAndType",
                     KeyConditionExpression: "deviceId = :d AND #sk BETWEEN :from AND :to",
-                    ExpressionAttributeNames: { "#sk": "type#timestamp" },
                     ExpressionAttributeValues: {
-                        ":d":    imei,
-                        ":from": `heartRate#${startISO}`,
-                        ":to":   `heartRate#${endISO}`,
+                        ":d": imei,
+                        ":from": fromKey,
+                        ":to": toKey,
                     },
                     ProjectionExpression: "#ts, #val",
+                    // Consolidated into a single object block so keys don't overwrite each other
                     ExpressionAttributeNames: {
-                        "#sk":  "type#timestamp",
-                        "#ts":  "timestamp",
-                        "#val": "value"
+                        "#sk": "type#timestamp", // Matches GSI sort key
+                        "#ts": "timestamp",      // Projects timestamp
+                        "#val": "value"           // Projects value
                     },
                     ExclusiveStartKey: lastKey
                 })
