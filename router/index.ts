@@ -6,12 +6,16 @@ import baselineRoutes from './baseline_routes';
 import evaluationRoutes from './evaluation_routes';
 import schedulerRoutes from './scheduler_route';
 import deviceTagRoutes from './device_tags_routes';
+import strainRoutes from './strain_router';
+import stressRoutes from './stress_routes';
 
 const router = Router();
 router.use('/', hrvRoutes);
 router.use('/', baselineRoutes);
 router.use('/', evaluationRoutes);
 router.use('/', schedulerRoutes);
+router.use('/', strainRoutes);
+router.use('/', stressRoutes);
 router.use('/device-tags', deviceTagRoutes);
 
 // Define routes

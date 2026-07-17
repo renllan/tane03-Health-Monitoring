@@ -6,7 +6,7 @@ export class StrainController {
         this.strainService = new StrainService();
     }
     async getStrain(req: any, res: any) {
-        try{
+        try {
             const { imei, date } = req.params;
             console.log(`[StrainController] getStrain called imei=${imei} date=${date}`);
             if (!imei || !date) {
@@ -17,11 +17,11 @@ export class StrainController {
             console.log(`[StrainController] strainData result:`, strainData);
             return res.status(200).json(strainData);
         }
-        catch (error) {
+        catch (error: any) {
             console.error("Error in getStrain:", error);
-            return res.status(500).json({ error: "Internal server error" });
+            return res.status(error.status || 500).json({ error: error.message || "Internal Service Error" });
         }
-       
+
     }
 
 }

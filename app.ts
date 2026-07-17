@@ -3,23 +3,32 @@ import router from './router';
 import { CognitoJwtVerifier } from 'aws-jwt-verify';
 
 const app = express();
+const useCognito = process.env.USE_COGNITO !== 'false';
 const cognitoUserPoolId = process.env.COGNITO_USER_POOL_ID;
 const cognitoClientId = process.env.COGNITO_CLIENT_ID;
-if (!cognitoUserPoolId || !cognitoClientId) {
+
+if (useCognito && (!cognitoUserPoolId || !cognitoClientId)) {
   console.error('Missing required env vars: COGNITO_USER_POOL_ID and/or COGNITO_CLIENT_ID. Exiting.');
   process.exit(1);
 }
 
-// Configure the verifier with your Cognito details
-// These match the values from your frontend configuration
-const verifier = CognitoJwtVerifier.create({
-  userPoolId: cognitoUserPoolId,
-  tokenUse: 'id', // We expect the frontend to send the idToken
-  clientId: cognitoClientId,
-});
+// Configure the verifier with your Cognito details (only if enabled)
+const verifier = useCognito
+  ? CognitoJwtVerifier.create({
+    userPoolId: cognitoUserPoolId!,
+    tokenUse: 'id', // We expect the frontend to send the idToken
+    clientId: cognitoClientId!,
+  })
+  : null;
 
 // Authentication Middleware
 const requireAuth = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  // If Cognito auth is disabled, bypass authentication checks entirely
+  if (!verifier) {
+    console.warn('Cognito auth is DISABLED (USE_COGNITO=false) — skipping token verification');
+    return next();
+  }
+
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Missing or invalid Authorization header' });
